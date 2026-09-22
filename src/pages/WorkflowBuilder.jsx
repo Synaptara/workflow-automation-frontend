@@ -6,6 +6,7 @@ import "reactflow/dist/style.css";
 import { nodeTypes } from "../flow/nodes";
 import { getWorkflow, saveSteps } from "../api/workflows";
 import { useRunSocket } from "../hooks/useRunSocket";
+import { INTEGRATIONS } from "../config/integrations";
 
 let idCounter = 0;
 const nextId = () => `n${Date.now()}_${idCounter++}`;
@@ -258,28 +259,62 @@ export default function WorkflowBuilder() {
             </div>
           )}
 
-          {selected.data.stepType === "action" && (
-            <div className="flex flex-col gap-2">
+  {selected.data.stepType === "action" && (
+            <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-top-2 duration-200">
               <select
-                className="bg-base-800 border border-border rounded px-2 py-1.5 text-sm text-text-primary"
+                className="bg-base-800 border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:border-accent focus:ring-1 focus:ring-accent outline-none transition-all"
                 value={selected.data.actionKey}
-                onChange={(e) => updateSelectedData({ actionKey: e.target.value })}
+                onChange={(e) => updateSelectedData({ actionKey: e.target.value, config: {} })}
               >
-                <option value="slack">Slack</option>
-                <option value="trello">Trello</option>
+                {Object.entries(INTEGRATIONS).map(([key, config]) => (
+                  <option key={key} value={key}>{config.name}</option>
+                ))}
               </select>
-              <textarea
-                className="bg-base-800 border border-border rounded px-2 py-1.5 text-sm text-text-primary font-mono h-32"
-                placeholder='{"webhook_url": "...", "message_template": "..."}'
-                defaultValue={JSON.stringify(selected.data.config, null, 2)}
-                onBlur={(e) => {
-                  try {
-                    updateSelectedData({ config: JSON.parse(e.target.value) });
-                  } catch {
-                    // leave as-is on invalid JSON
-                  }
-                }}
-              />
+
+              <div className="flex flex-col gap-4 mt-2">
+                {INTEGRATIONS[selected.data.actionKey]?.fields.map((field) => (
+                  <div key={field.key} className="flex flex-col gap-1.5">
+                    <label className="text-xs font-medium text-text-muted">{field.label}</label>
+                    {field.type === "textarea" ? (
+                      <div className="flex flex-col gap-1">
+                        <textarea
+                          className="bg-base-900 border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:border-accent outline-none transition-colors h-24 resize-none"
+                          placeholder={field.placeholder}
+                          value={selected.data.config[field.key] || ""}
+                          onChange={(e) => updateSelectedData({ 
+                            config: { ...selected.data.config, [field.key]: e.target.value } 
+                          })}
+                        />
+                        {/* Dynamic Variable Pill for textareas */}
+                        <div className="flex flex-wrap gap-2 mt-1">
+                          <span className="text-[10px] text-text-muted flex items-center">Insert variable:</span>
+                          <button
+                            onClick={() => {
+                              const currentText = selected.data.config[field.key] || "";
+                              updateSelectedData({
+                                config: { ...selected.data.config, [field.key]: currentText + "{{trigger.budget}}" },
+                              });
+                            }}
+                            className="text-[10px] bg-base-800 border border-border px-2 py-1 rounded-md hover:border-accent text-text-primary transition-colors"
+                          >
+                            + {"{{trigger.budget}}"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <input
+                        type="text"
+                        className="bg-base-900 border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:border-accent outline-none transition-colors"
+                        placeholder={field.placeholder}
+                        value={selected.data.config[field.key] || ""}
+                        onChange={(e) => updateSelectedData({ 
+                          config: { ...selected.data.config, [field.key]: e.target.value } 
+                        })}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
