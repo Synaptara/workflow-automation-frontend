@@ -1,6 +1,9 @@
 import axios from "axios";
 
-const api = axios.create({ baseURL: "http://localhost:8000/api" });
+// Pull the base URL from Vite's environment, fallback to localhost for local dev
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+const api = axios.create({ baseURL: `${API_BASE}/api` });
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("access");
@@ -17,7 +20,7 @@ api.interceptors.response.use(
       const refresh = localStorage.getItem("refresh");
       if (refresh) {
         try {
-          const { data } = await axios.post("http://localhost:8000/api/auth/refresh/", { refresh });
+          const { data } = await axios.post(`${API_BASE}/api/auth/refresh/`, { refresh });
           localStorage.setItem("access", data.access);
           original.headers.Authorization = `Bearer ${data.access}`;
           return api(original);

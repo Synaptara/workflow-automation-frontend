@@ -86,7 +86,6 @@ export default function WorkflowBuilder() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // merge live step status into node data so nodes.jsx can color borders
   useEffect(() => {
     setNodes((ns) =>
       ns.map((n) => ({ ...n, data: { ...n.data, liveStatus: stepStatus[n.id] } }))
@@ -135,7 +134,8 @@ export default function WorkflowBuilder() {
       return;
     }
     try {
-      const res = await fetch(`http://localhost:8000${workflow.webhook_url}`, {
+      const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+      const res = await fetch(`${API_BASE}${workflow.webhook_url}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -259,7 +259,7 @@ export default function WorkflowBuilder() {
             </div>
           )}
 
-  {selected.data.stepType === "action" && (
+          {selected.data.stepType === "action" && (
             <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-top-2 duration-200">
               <select
                 className="bg-base-800 border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:border-accent focus:ring-1 focus:ring-accent outline-none transition-all"
