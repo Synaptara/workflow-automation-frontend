@@ -11,7 +11,12 @@ export function useRunSocket(runId) {
     setRunStatus("running");
 
     const token = localStorage.getItem("access");
-    const ws = new WebSocket(`ws://localhost:8000/ws/runs/${runId}/?token=${token}`);
+    const apiBase = import.meta.env.VITE_API_URL || "http://localhost:8000";
+    
+    // Convert http:// to ws:// and https:// to wss://
+    const wsBase = apiBase.replace(/^http/, "ws");
+
+    const ws = new WebSocket(`${wsBase}/ws/runs/${runId}/?token=${token}`);
     wsRef.current = ws;
 
     ws.onmessage = (msg) => {
