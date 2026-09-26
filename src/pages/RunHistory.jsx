@@ -9,30 +9,6 @@ const statusClass = {
   pending: "bg-base-800 text-text-muted",
 };
 
-function StepRunRow({ step }) {
-  return (
-    <div className="flex items-start gap-3 py-2 border-t border-border first:border-t-0">
-      <span className={`px-2 py-0.5 rounded text-xs shrink-0 ${statusClass[step.status] || statusClass.pending}`}>
-        {step.status}
-      </span>
-      <div className="flex-1 min-w-0">
-        <p className="text-text-primary text-xs capitalize">
-          {step.step_type}
-          {step.action_key ? ` · ${step.action_key}` : ""}
-        </p>
-        {step.status === "failed" && step.error && (
-          <p className="text-status-danger text-xs mt-1 break-words">{step.error}</p>
-        )}
-        {step.status === "success" && Object.keys(step.output || {}).length > 0 && (
-          <pre className="text-text-muted text-xs mt-1 whitespace-pre-wrap break-words">
-            {JSON.stringify(step.output, null, 2)}
-          </pre>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export default function RunHistory() {
   const { id } = useParams();
   const [runs, setRuns] = useState([]);
@@ -80,20 +56,70 @@ export default function RunHistory() {
                     {r.step_runs.length} {expanded === r.id ? "▲" : "▼"}
                   </td>
                 </tr>
+                
+                {/* Expanded Row Content */}
                 {expanded === r.id && (
                   <tr key={`${r.id}-detail`} className="bg-base-950">
-                    <td colSpan={4} className="px-4 py-3">
-                      <p className="text-text-muted text-xs uppercase tracking-wide mb-2">
-                        Trigger payload
-                      </p>
-                      <pre className="text-text-muted text-xs mb-3 whitespace-pre-wrap break-words">
-                        {JSON.stringify(r.trigger_payload, null, 2)}
-                      </pre>
-                      {r.step_runs.length === 0 ? (
-                        <p className="text-text-muted text-xs">No steps ran.</p>
-                      ) : (
-                        r.step_runs.map((s) => <StepRunRow key={s.id} step={s} />)
-                      )}
+                    <td colSpan="4" className="p-0 border-b border-border">
+                      <div className="bg-base-900/50 p-6 flex flex-col gap-6 shadow-inner">
+                        
+                        {/* 1. The Incoming Trigger Data */}
+                        <div>
+                          <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Incoming Trigger Payload</p>
+                          <pre className="bg-base-800 border border-border p-3 rounded-lg text-xs font-mono text-text-primary overflow-x-auto">
+                            {JSON.stringify(r.trigger_payload, null, 2)}
+                          </pre>
+                        </div>
+
+                        {/* 2. The Step-by-Step Execution Logs */}
+                        <div>
+                          <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Module Executions</p>
+                          {r.step_runs?.length > 0 ? (
+                            <div className="flex flex-col gap-3">
+                              {r.step_runs.map((step, idx) => (
+                                <div key={step.id} className="bg-base-800 border border-border rounded-lg p-3">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="text-sm font-medium text-text-primary capitalize flex items-center gap-2">
+                                      <span className="bg-base-900 text-text-muted px-2 py-0.5 rounded text-xs">{idx + 1}</span>
+                                      {step.action_key || step.step_type}
+                                    </span>
+                                    <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                                      step.status === 'success' ? 'bg-status-success/10 text-status-success' : 'bg-status-danger/10 text-status-danger'
+                                    }`}>
+                                      {step.status}
+                                    </span>
+                                  </div>
+
+                                  {/* Show the JSON response from the API (e.g., HTTPbin or Resend) */}
+                                  {step.output && Object.keys(step.output).length > 0 && (
+                                    <div className="mt-3">
+                                      <p className="text-[10px] text-text-muted uppercase mb-1">Response Output</p>
+                                      <pre className="bg-base-900 border border-border p-3 rounded text-xs font-mono text-accent overflow-x-auto">
+                                        {JSON.stringify(step.output, null, 2)}
+                                      </pre>
+                                    </div>
+                                  )}
+
+                                  {/* Show the Python Traceback if it failed */}
+                                  {step.error && (
+                                    <div className="mt-3">
+                                      <p className="text-[10px] text-text-muted uppercase mb-1">Error Trace</p>
+                                      <pre className="bg-base-900 border border-status-danger/30 p-3 rounded text-xs font-mono text-status-danger overflow-x-auto whitespace-pre-wrap">
+                                        {step.error}
+                                      </pre>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-text-muted italic bg-base-800 p-3 rounded-lg border border-border">
+                              No steps executed for this trigger.
+                            </p>
+                          )}
+                        </div>
+
+                      </div>
                     </td>
                   </tr>
                 )}
