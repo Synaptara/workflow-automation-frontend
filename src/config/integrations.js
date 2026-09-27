@@ -22,5 +22,25 @@ export const INTEGRATIONS = {
       { key: "headers", label: "Headers (JSON format)", type: "textarea", placeholder: '{"Authorization": "Bearer token", "Content-Type": "application/json"}' },
       { key: "body", label: "Body (JSON format)", type: "textarea", placeholder: '{"amount": "{{trigger.budget}}"}' }
     ]
-  }
+  },
+  discord: {
+    name: "Discord",
+    fields: [
+      { key: "webhook_url", label: "Webhook URL", type: "text", placeholder: "https://discord.com/api/webhooks/..." },
+      { key: "content", label: "Message Text / @Pings", type: "textarea", placeholder: "Deployment failed! <@123456789>" },
+      { key: "embed_title", label: "Embed Title", type: "text", placeholder: "Workflow Alert" },
+      { key: "embed_description", label: "Embed Description", type: "textarea", placeholder: "Detailed alert info..." },
+      { key: "embed_color", label: "Embed Color (Hex)", type: "text", placeholder: "ff0000" },
+    ],
+  },
+  
+  google_sheets: {
+    name: "Google Sheets",
+    fields: [
+      { key: "access_token", label: "Access Token", type: "text", placeholder: "ya29.a0AfB_..." },
+      { key: "spreadsheet_id", label: "Spreadsheet ID", type: "text", placeholder: "1BxiMVs0XRYFgPN..." },
+      { key: "range", label: "Sheet Name & Range", type: "text", placeholder: "Sheet1!A:A" },
+      { key: "values", label: "Row Values (Comma Separated)", type: "textarea", placeholder: "John Doe, john@example.com, $1500" },
+    ],
+  },
 };
