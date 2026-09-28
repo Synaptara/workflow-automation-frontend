@@ -19,7 +19,7 @@ const getEdgeStyling = (sourceHandle) => {
       labelStyle: { fill: "#3fb950", fontWeight: 700, fontSize: 11, fontFamily: "monospace" },
       labelBgStyle: { fill: "#16161f", stroke: "#3fb950", strokeWidth: 1, rx: 6, ry: 6 },
       labelBgPadding: [6, 4],
-      style: { strokeWidth: 3, stroke: "#3fb950" }
+      style: { strokeWidth: 2, stroke: "#3fb950", strokeDasharray: "5 5" }
     };
   }
   if (sourceHandle === "false") {
@@ -28,22 +28,21 @@ const getEdgeStyling = (sourceHandle) => {
       labelStyle: { fill: "#f85149", fontWeight: 700, fontSize: 11, fontFamily: "monospace" },
       labelBgStyle: { fill: "#16161f", stroke: "#f85149", strokeWidth: 1, rx: 6, ry: 6 },
       labelBgPadding: [6, 4],
-      style: { strokeWidth: 3, stroke: "#f85149" }
+      style: { strokeWidth: 2, stroke: "#f85149", strokeDasharray: "5 5" }
     };
   }
-  return { style: { strokeWidth: 3, stroke: "#4b4b6b" } };
+  return { style: { strokeWidth: 2, stroke: "#4b4b6b", strokeDasharray: "5 5" } };
 };
 
-// Auto-Layout Engine set to Left-to-Right (LR)
 const getLayoutedElements = (nodes, edges, direction = 'LR') => {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
-  
-  // ranksep controls horizontal spacing, nodesep controls vertical spacing
-  dagreGraph.setGraph({ rankdir: direction, nodesep: 150, ranksep: 250 });
+
+  // Expanded spacing to accommodate the new 280px wide rectangular cards
+  dagreGraph.setGraph({ rankdir: direction, nodesep: 100, ranksep: 350 });
 
   nodes.forEach((node) => {
-    dagreGraph.setNode(node.id, { width: 140, height: 100 });
+    dagreGraph.setNode(node.id, { width: 280, height: 100 });
   });
 
   edges.forEach((edge) => {
@@ -57,7 +56,7 @@ const getLayoutedElements = (nodes, edges, direction = 'LR') => {
     return {
       ...node,
       position: {
-        x: nodeWithPosition.x - 70,
+        x: nodeWithPosition.x - 140, // Half of 280
         y: nodeWithPosition.y - 50,
       },
     };
@@ -122,7 +121,7 @@ export default function WorkflowBuilder() {
   const [testPayload, setTestPayload] = useState('{\n  "budget": 6000\n}');
   const [testRunId, setTestRunId] = useState(null);
   const [testError, setTestError] = useState("");
-  
+
   const [edgeToDelete, setEdgeToDelete] = useState(null);
   const { stepStatus, runStatus } = useRunSocket(testRunId);
 
@@ -141,7 +140,7 @@ export default function WorkflowBuilder() {
   const getUpstreamNodes = useCallback((targetId, currentEdges, currentNodes, visited = new Set()) => {
     let result = [];
     const incoming = currentEdges.filter(e => e.target === targetId);
-    
+
     incoming.forEach(edge => {
       if (!visited.has(edge.source)) {
         visited.add(edge.source);
@@ -152,7 +151,7 @@ export default function WorkflowBuilder() {
         result.push(...getUpstreamNodes(edge.source, currentEdges, currentNodes, visited));
       }
     });
-    
+
     return Array.from(new Map(result.map(item => [item.id, item])).values());
   }, []);
 
@@ -197,7 +196,7 @@ export default function WorkflowBuilder() {
       {
         id: nextId(),
         type,
-        position: { x: ns.length > 0 ? ns[ns.length - 1].position.x + 200 : 300, y: window.innerHeight / 2 - 100 },
+        position: { x: ns.length > 0 ? ns[ns.length - 1].position.x + 350 : 300, y: window.innerHeight / 2 - 100 },
         data: type === "condition"
             ? { stepType: "condition", config: { field: "", operator: "==", value: "" }, order: ns.length }
             : { stepType: "action", actionKey: "slack", config: {}, order: ns.length },
@@ -257,11 +256,11 @@ export default function WorkflowBuilder() {
       <div className="flex h-[calc(100vh-3.5rem)]">
         <div className="w-64 border-r border-border bg-base-900 p-5 flex flex-col gap-3 overflow-y-auto z-10 shadow-[5px_0_15px_rgba(0,0,0,0.1)]">
           <p className="text-text-muted text-[10px] font-bold uppercase tracking-widest mb-1">Canvas Tools</p>
-          
+
           <button onClick={onLayout} className="text-sm font-medium text-left px-3 py-2 rounded-lg bg-base-800 border border-border hover:border-accent text-text-primary transition-all flex items-center justify-between">
             <span>✨ Auto Layout</span>
           </button>
-          
+
           <div className="h-px bg-border my-2 w-full"></div>
 
           <p className="text-text-muted text-[10px] font-bold uppercase tracking-widest mb-1">Add Module</p>
@@ -296,7 +295,7 @@ export default function WorkflowBuilder() {
               {testError && <p className="text-status-danger text-xs">{testError}</p>}
               {testRunId && (
                 <p className="text-xs text-text-muted bg-base-950 p-2 rounded-md border border-border/30 flex items-center justify-between">
-                  Status: 
+                  Status:
                   <span className={`font-bold ${runStatus === "success" ? "text-status-success" : runStatus === "failed" ? "text-status-danger" : "text-accent animate-pulse"}`}>
                     {runStatus ? runStatus.toUpperCase() : "RUNNING..."}
                   </span>
@@ -309,7 +308,7 @@ export default function WorkflowBuilder() {
           )}
         </div>
 
-        <div className="flex-1 bg-[#101017]">
+        <div className="flex-1 bg-[#0b0b12]">
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -319,7 +318,7 @@ export default function WorkflowBuilder() {
             onNodeClick={(_, node) => setSelected(node)}
             onEdgeClick={onEdgeClick}
             nodeTypes={nodeTypes}
-            defaultEdgeOptions={{ type: 'bezier', interactionWidth: 40 }}
+            defaultEdgeOptions={{ type: 'smoothstep', interactionWidth: 40 }}
             fitView
           >
             <Background color="#16161f" gap={24} size={2} />
@@ -331,7 +330,7 @@ export default function WorkflowBuilder() {
           <div className="w-80 border-l border-border bg-base-900 p-5 z-10 shadow-[-10px_0_20px_rgba(0,0,0,0.3)] flex flex-col overflow-y-auto">
             <div className="flex items-center justify-between mb-4 pb-2 border-b border-border/50">
               <p className="text-text-muted text-[10px] font-bold uppercase tracking-widest">
-                Configure {selected.data.stepType}
+                Configure Module
               </p>
               <button onClick={() => setSelected(null)} className="text-text-muted hover:text-white text-lg leading-none">&times;</button>
             </div>
@@ -404,11 +403,14 @@ export default function WorkflowBuilder() {
                           className="text-[10px] font-mono bg-[#1E293B] border border-[#334155] px-2 py-1 rounded-md hover:border-[#60A5FA] text-[#93C5FD] transition-all"
                         >+ trigger.{key}</button>
                       ))}
-                      {upstreamActions.map((node) => (
-                        <button key={node.id} onClick={() => updateSelectedData({ config: { ...selected.data.config, field: `${node.id}` } })}
-                          className="text-[10px] font-mono bg-[#3B2844] border border-[#5B3E68] px-2 py-1 rounded-md hover:border-[#D8B4E2] text-[#E9D5FF] transition-all"
-                        >+ {INTEGRATIONS[node.data.actionKey]?.name || node.data.actionKey}</button>
-                      ))}
+                      {upstreamActions.map((node) => {
+                        const defaultPath = node.data.actionKey === "groq_ai" ? ".reply" : "";
+                        return (
+                          <button key={node.id} onClick={() => updateSelectedData({ config: { ...selected.data.config, field: `${node.id}${defaultPath}` } })}
+                            className="text-[10px] font-mono bg-[#3B2844] border border-[#5B3E68] px-2 py-1 rounded-md hover:border-[#D8B4E2] text-[#E9D5FF] transition-all"
+                          >+ {INTEGRATIONS[node.data.actionKey]?.name || node.data.actionKey}</button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
@@ -454,7 +456,7 @@ export default function WorkflowBuilder() {
                 {INTEGRATIONS[selected.data.actionKey]?.fields.map((field) => (
                   <div key={field.key} className="flex flex-col gap-1.5">
                     <label className="text-xs font-semibold text-text-primary">{field.label}</label>
-                    
+
                     {field.type === "textarea" ? (
                       <textarea
                         className="bg-base-950 border border-border/50 rounded-lg px-3 py-2 text-sm text-text-primary focus:border-accent outline-none transition-colors h-20 resize-none shadow-inner"
@@ -462,6 +464,16 @@ export default function WorkflowBuilder() {
                         value={selected.data.config[field.key] || ""}
                         onChange={(e) => updateSelectedData({ config: { ...selected.data.config, [field.key]: e.target.value } })}
                       />
+                    ) : field.type === "select" ? (
+                      <select
+                        className="bg-base-950 border border-border/50 rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent outline-none transition-colors shadow-inner appearance-none cursor-pointer"
+                        value={selected.data.config[field.key] || field.options[0].value}
+                        onChange={(e) => updateSelectedData({ config: { ...selected.data.config, [field.key]: e.target.value } })}
+                      >
+                        {field.options.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
                     ) : (
                       <input
                         type="text"
@@ -484,15 +496,18 @@ export default function WorkflowBuilder() {
                             className="text-[10px] font-mono bg-[#1E293B] border border-[#334155] px-2 py-1 rounded-md hover:border-[#60A5FA] hover:bg-[#1E3A8A]/30 text-[#93C5FD] transition-all shadow-sm"
                           >+ trigger.{key}</button>
                         ))}
-                        {upstreamActions.map((node) => (
-                          <button key={`upstream-${node.id}`} type="button"
-                            onClick={() => {
-                              const currentVal = selected.data.config[field.key] || "";
-                              updateSelectedData({ config: { ...selected.data.config, [field.key]: currentVal + `{{${node.id}}}` } });
-                            }}
-                            className="text-[10px] font-mono bg-[#3B2844] border border-[#5B3E68] px-2 py-1 rounded-md hover:border-[#D8B4E2] hover:bg-[#58296B]/30 text-[#E9D5FF] transition-all shadow-sm"
-                          >+ {INTEGRATIONS[node.data.actionKey]?.name || node.data.actionKey}</button>
-                        ))}
+                        {upstreamActions.map((node) => {
+                          const defaultPath = node.data.actionKey === "groq_ai" ? ".reply" : "";
+                          return (
+                            <button key={`upstream-${node.id}`} type="button"
+                              onClick={() => {
+                                const currentVal = selected.data.config[field.key] || "";
+                                updateSelectedData({ config: { ...selected.data.config, [field.key]: currentVal + `{{${node.id}${defaultPath}}}` } });
+                              }}
+                              className="text-[10px] font-mono bg-[#3B2844] border border-[#5B3E68] px-2 py-1 rounded-md hover:border-[#D8B4E2] hover:bg-[#58296B]/30 text-[#E9D5FF] transition-all shadow-sm"
+                            >+ {INTEGRATIONS[node.data.actionKey]?.name || node.data.actionKey}</button>
+                          );
+                        })}
                         {getAvailableVariables().length === 0 && upstreamActions.length === 0 && (
                           <span className="text-[10px] text-text-muted italic">No variables available</span>
                         )}
@@ -507,12 +522,12 @@ export default function WorkflowBuilder() {
         )}
       </div>
 
-      <ConfirmModal 
-        isOpen={!!edgeToDelete} 
-        onClose={() => setEdgeToDelete(null)} 
+      <ConfirmModal
+        isOpen={!!edgeToDelete}
+        onClose={() => setEdgeToDelete(null)}
         onConfirm={confirmEdgeDelete}
         title="Remove Connection"
-        message="Are you sure you want to remove this connection line? The modules will remain, but data will no longer flow between them."
+        message="Are you sure you want to remove this connection line?"
       />
     </>
   );

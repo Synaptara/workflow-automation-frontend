@@ -33,7 +33,7 @@ export const INTEGRATIONS = {
       { key: "embed_color", label: "Embed Color (Hex)", type: "text", placeholder: "ff0000" },
     ],
   },
-  
+
   google_sheets: {
     name: "Google Sheets",
     fields: [
@@ -43,4 +43,21 @@ export const INTEGRATIONS = {
       { key: "values", label: "Row Values (Comma Separated)", type: "textarea", placeholder: "John Doe, john@example.com, $1500" },
     ],
   },
+  groq_ai: {
+      name: "Groq AI",
+      fields: [
+        { key: "api_key", label: "Groq API Key", type: "text", placeholder: "gsk_..." },
+        {
+          key: "model",
+          label: "Model",
+          type: "select",
+          options: [
+            { value: "gemma2-9b-it", label: "Gemma 2 9B (Fast & Reliable)" },
+            { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (Complex)" },
+            { value: "mixtral-8x7b-32768", label: "Mixtral 8x7B" }
+          ]
+        },
+        { key: "prompt", label: "Prompt", type: "textarea", placeholder: "Extract the names from this text: {{trigger.email_body}}" },
+      ],
+    },
 };
