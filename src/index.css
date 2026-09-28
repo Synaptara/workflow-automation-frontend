@@ -1,26 +1,67 @@
 @import "tailwindcss";
 
 @theme {
-  --color-base-950: #0a0a0f;
-  --color-base-900: #111118;
-  --color-base-800: #16161f;
-  --color-base-700: #1c1c29;
-  --color-border: #24242f;
+    /* Core Backgrounds from HTML */
+    --color-canvas: #08090d;
+    --color-sidebar: #0c0c0e;
+    --color-surface: #08090d;
+    --color-surface-hover: #141414;
+    --color-surface-elevated: #181818;
 
-  --color-text-primary: #eceef2;
-  --color-text-muted: #90909f;
+    /* Borders from HTML */
+    --color-border-subtle: rgba(255, 255, 255, 0.07);
+    --color-border-default: #1f1f1f;
+    --color-border-card: #222222;
+    --color-border-icon: #272727;
+    --color-border-focus: #52525b;
 
-  --color-accent: #7c5cff;
-  --color-accent-hover: #8f70ff;
+    /* Typography from HTML */
+    --color-text-primary: #f4f4f5;
+    --color-text-secondary: #a1a1aa;
+    --color-text-muted: #71717a;
 
-  --color-status-success: #3fb950;
-  --color-status-warning: #d29922;
-  --color-status-danger: #f85149;
+    /* Brand / Accents */
+    --color-accent: #ffffff;
+    --color-accent-hover: #e4e4e7;
+    --color-accent-text: #09090b;
 
-  --font-sans: "Inter", ui-sans-serif, system-ui;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+    /* Status */
+    --color-status-success: #10b981;
+    --color-status-danger: #f85149;
+
+    /* Fonts (Added Ovo) */
+    --font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif;
+    --font-serif: "Ovo", ui-serif, Georgia, serif;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
 body {
-  @apply bg-base-950 text-text-primary font-sans;
+    @apply bg-canvas text-text-primary font-sans antialiased;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbar for refined appearance from HTML */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: #090a0f;
+}
+::-webkit-scrollbar-thumb {
+    background: #1f2433;
+    border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #2e354b;
+}
+
+/* Subtle transitions for cards */
+.integration-card {
+    transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.integration-card:hover {
+    border-color: rgba(255, 255, 255, 0.16);
+    transform: translateY(-1px);
 }

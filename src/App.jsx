@@ -1,18 +1,25 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
+import Sidebar from "./components/Sidebar";
 import TopNav from "./components/TopNav";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import WorkflowList from "./pages/WorkflowList";
 import WorkflowBuilder from "./pages/WorkflowBuilder";
 import RunHistory from "./pages/RunHistory";
+import IntegrationsVault from "./pages/IntegrationsVault";
 
 function Shell({ children }) {
   return (
-    <div className="min-h-screen bg-base-950">
-      <TopNav />
-      {children}
+    <div className="flex h-screen w-full bg-canvas overflow-hidden">
+      <Sidebar />
+      <div className="flex flex-col flex-1 min-w-0">
+        <TopNav />
+        <main className="flex-1 relative overflow-hidden">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
@@ -53,6 +60,16 @@ export default function App() {
                 </Shell>
               </ProtectedRoute>
             }
+          />
+          <Route
+              path="/integrations"
+              element={
+                <ProtectedRoute>
+                  <Shell>
+                    <IntegrationsVault />
+                  </Shell>
+                </ProtectedRoute>
+              }
           />
         </Routes>
       </AuthProvider>
