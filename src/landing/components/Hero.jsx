@@ -12,7 +12,7 @@ export default function Hero() {
       <div className="relative z-10 max-w-6xl mx-auto px-6 pt-24 pb-12 md:pt-32 md:pb-24">
 
         {/* Top Text Section */}
-        <div className="flex flex-col md:flex-row justify-between items-start gap-10 md:gap-8">
+        <div className="flex flex-col md:flex-row justify-between items-start gap-2 md:gap-8">
 
           {/* Left Title */}
           <h1 className="text-4xl sm:text-5xl md:text-[60px] font-display font-normal tracking-tight leading-[1.05] shrink-0" style={{ color: "var(--l-text)" }}>
