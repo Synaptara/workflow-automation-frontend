@@ -1,10 +1,12 @@
 import { useAuth } from "../context/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useGlobalSocket } from "../hooks/useGlobalSocket";
 
 export default function TopNav() {
   const { logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { unreadCount, clearUnread } = useGlobalSocket();
 
   // Dynamic breadcrumb text based on route
   const getPageTitle = () => {
@@ -12,13 +14,18 @@ export default function TopNav() {
     if (location.pathname.includes("/workflows/")) return "Workflow Builder";
     if (location.pathname === "/integrations") return "Integrations Vault";
     if (location.pathname === "/billing") return "Billing";
+    if (location.pathname === "/history") return "Global Run History";
     return "Dashboard";
+  };
+
+  const handleNotificationsClick = () => {
+    clearUnread();
+    navigate("/history");
   };
 
   return (
     <header className="h-16 border-b border-[#1b1b1e] bg-surface flex items-center justify-between pl-16 pr-4 md:px-8 shrink-0 z-10 shadow-sm relative">
       <div className="flex items-center gap-3.5">
-        {/* Distinct "Go Back" Arrow instead of a Chevron */}
         <button
           onClick={() => navigate(-1)}
           aria-label="Go Back"
@@ -31,17 +38,20 @@ export default function TopNav() {
           </svg>
         </button>
 
-        {/* Title resized to match "Production Environment" but keeping bold white */}
         <h1 className="text-xs font-bold text-white tracking-wide pt-0.5">{getPageTitle()}</h1>
-
         <span className="text-zinc-600 font-light hidden sm:block">/</span>
         <span className="text-xs font-normal text-[#a1a1aa] hidden sm:block pt-0.5">Production Environment</span>
       </div>
 
       <div className="flex items-center gap-5">
-        <button aria-label="Notifications" className="relative text-[#a1a1aa] hover:text-white transition-colors">
+        <button onClick={handleNotificationsClick} aria-label="Notifications" className="relative text-[#a1a1aa] hover:text-white transition-colors">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-          <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-status-success rounded-full ring-2 ring-[#09090b]"></span>
+          {/* Unread Badge Engine */}
+          {unreadCount > 0 && (
+            <span className="absolute -top-1.5 -right-2 bg-status-success text-[#09090b] text-[9px] font-bold px-1.5 rounded-full ring-2 ring-[#09090b] animate-in zoom-in">
+              {unreadCount}
+            </span>
+          )}
         </button>
         <div className="w-px h-4 bg-[#222222]"></div>
         <button

@@ -72,6 +72,18 @@ export default function App() {
                   </Shell>
                 </ProtectedRoute>
               }
+
+          />
+
+          <Route
+            path="/history"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <RunHistory />
+                </Shell>
+              </ProtectedRoute>
+            }
           />
         </Routes>
       </AuthProvider>

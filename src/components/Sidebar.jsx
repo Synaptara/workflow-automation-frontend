@@ -1,15 +1,22 @@
 import { useState, useEffect } from "react";
 import { NavLink } from "react-router-dom";
 import Logo from "../assets/orkflo.jpeg";
+import { getUsage } from "../api/workflows";
 
 export default function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [usage, setUsage] = useState({ count: 0, limit: 1000, percentage: 0 });
 
   // Initialize state from localStorage, defaulting to false if not found
   const [collapsed, setCollapsed] = useState(() => {
     const saved = localStorage.getItem("sidebarCollapsed");
     return saved !== null ? JSON.parse(saved) : false;
   });
+
+  // Fetch true database usage limit on mount
+  useEffect(() => {
+    getUsage().then(data => setUsage(data)).catch(() => {});
+  }, []);
 
   // Sync state to localStorage whenever it changes
   useEffect(() => {
@@ -47,7 +54,7 @@ export default function Sidebar() {
         <div className="md:hidden fixed inset-0 bg-black/60 z-[40] backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
       )}
 
-      <aside className={`fixed md:relative inset-y-0 left-0 z-[50] ${collapsed ? "w-20" : "w-64"} h-screen bg-[#0c0c0e] border-r border-[#1f1f1f] flex flex-col shrink-0 transition-transform md:transition-[width] duration-300 ease-in-out shadow-2xl md:shadow-[4px_0_24px_rgba(0,0,0,0.2)] ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
+      <aside className={`fixed md:relative inset-y-0 left-0 z-[50] ${collapsed ? "w-20" : "w-64"} h-screen bg-[#08090d] border-r border-[#1f1f1f] flex flex-col shrink-0 transition-transform md:transition-[width] duration-300 ease-in-out shadow-2xl md:shadow-[4px_0_24px_rgba(0,0,0,0.2)] ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
 
         {/* Floating Toggle Button (Desktop Only) */}
         <button
@@ -100,15 +107,15 @@ export default function Sidebar() {
         </div>
 
         {/* Footer / Plan Limits */}
-        <div className="p-4 border-t border-[#1f1f1f] bg-[#0c0c0e] overflow-hidden whitespace-nowrap min-h-[90px] flex flex-col justify-center">
+        <div className="p-4 border-t border-[#1f1f1f] bg-[#08090d] overflow-hidden whitespace-nowrap min-h-[90px] flex flex-col justify-center">
           {!collapsed ? (
             <div className="animate-in fade-in duration-300">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-xs font-semibold text-[#a1a1aa]">Task Usage</span>
-                <span className="text-xs font-bold text-white">40%</span>
+                <span className="text-[10px] font-mono text-[#a1a1aa]">{usage.count}/{usage.limit}</span>
               </div>
               <div className="w-full bg-[#1f1f1f] rounded-full h-1.5 mb-3">
-                <div className="bg-white h-1.5 rounded-full" style={{ width: "40%" }}></div>
+                <div className="bg-white h-1.5 rounded-full transition-all duration-1000 ease-in-out" style={{ width: `${usage.percentage}%` }}></div>
               </div>
               <button className="w-full py-2 text-xs font-bold text-white bg-[#111111] border border-[#222222] hover:border-white rounded-md transition-all shadow-sm">
                 Upgrade Plan
@@ -116,8 +123,8 @@ export default function Sidebar() {
             </div>
           ) : (
             <div className="flex justify-center items-center animate-in fade-in duration-300">
-              <div className="w-8 h-8 rounded-full border-2 border-white flex items-center justify-center text-[10px] font-bold text-black bg-white" title="Task Usage: 40%">
-                40%
+              <div className="w-8 h-8 rounded-full border-2 border-white flex items-center justify-center text-[10px] font-bold text-black bg-white" title={`Task Usage: ${usage.percentage}%`}>
+                {usage.percentage}%
               </div>
             </div>
           )}

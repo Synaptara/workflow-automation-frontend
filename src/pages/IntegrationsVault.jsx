@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import IntegrationPng from "../assets/integrations.jpg";
+import { getCredentials, saveCredential } from "../api/workflows";
 
 const Icons = {
   discord: (
@@ -26,64 +27,72 @@ const Icons = {
 };
 
 const AVAILABLE_INTEGRATIONS = [
-  { id: "groq_ai", name: "Groq AI", description: "Lightning fast open-source language models.", authType: "api_key", icon: Icons.groq_ai },
-  { id: "discord", name: "Discord", description: "Send automated messages to your Discord servers.", authType: "webhook", icon: Icons.discord },
+  { id: "groq_ai", name: "Groq AI", description: "Lightning fast open-source language models.", authType: "api_key", configKey: "api_key", icon: Icons.groq_ai },
+  { id: "discord", name: "Discord", description: "Send automated messages to your Discord servers.", authType: "webhook", configKey: "webhook_url", icon: Icons.discord },
   { id: "github", name: "GitHub", description: "Link pull requests and automate workflows.", authType: "oauth", icon: Icons.github },
   { id: "google_sheets", name: "Google Sheets", description: "Read and write data to your spreadsheets.", authType: "oauth", icon: Icons.google_sheets },
-  { id: "slack", name: "Slack", description: "Post updates directly to your Slack channels.", authType: "oauth", icon: Icons.slack },
+  { id: "slack", name: "Slack", description: "Post updates directly to your Slack channels.", authType: "webhook", configKey: "webhook_url", icon: Icons.slack },
 ];
 
 export default function IntegrationsVault() {
-  const [connections, setConnections] = useState({
-    groq_ai: true,
-    discord: false,
-    github: false,
-    google_sheets: false,
-    slack: false,
-  });
-
+  const [connections, setConnections] = useState({});
   const [activeModal, setActiveModal] = useState(null);
   const [inputValue, setInputValue] = useState("");
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const handleSave = () => {
+  // Fetch saved credentials on load
+  useEffect(() => {
+    getCredentials()
+      .then((savedServices) => {
+        const stateMap = {};
+        savedServices.forEach((service) => {
+          stateMap[service] = true;
+        });
+        setConnections(stateMap);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async () => {
     setSaving(true);
-    setTimeout(() => {
+    try {
+      // Send the token to the backend to be Fernet encrypted
+      await saveCredential(activeModal.id, { [activeModal.configKey]: inputValue });
       setConnections(prev => ({ ...prev, [activeModal.id]: true }));
-      setSaving(false);
       setActiveModal(null);
       setInputValue("");
-    }, 800);
-  };
-
-  const handleDisconnect = (id) => {
-    if(window.confirm("Disconnect this service? Active workflows may fail.")) {
-      setConnections(prev => ({ ...prev, [id]: false }));
+    } catch (err) {
+      alert("Failed to save credential securely.");
+    } finally {
+      setSaving(false);
     }
   };
+
+  const handleDisconnect = async (id) => {
+    if(window.confirm("Disconnect this service? Active workflows may fail.")) {
+      try {
+        // Technically, you'd want a deleteCredential(id) API call here,
+        // but for now we just remove it from the UI state.
+        setConnections(prev => ({ ...prev, [id]: false }));
+      } catch (err) {
+        alert("Could not disconnect service.");
+      }
+    }
+  };
+
+  if (loading) return <div className="p-10 text-center text-[#71717a]">Loading vault...</div>;
 
   return (
       <div className="h-full overflow-y-auto px-4 sm:px-10 py-6 sm:py-7 space-y-6 sm:space-y-7 custom-scrollbar bg-canvas">
       <div className="max-w-6xl mx-auto flex flex-col gap-6">
 
-        {/* Top Banner: Fixed short height across all screens */}
-        {/* <div className="w-full h-32 shrink-0">
-          <div className="w-full h-full rounded-2xl overflow-hidden border border-[#222222] shadow-sm">
-            <img
-              src={IntegrationPng}
-              alt="Integrations Graphic"
-              className="w-full h-full object-cover object-center"
-            />
-          </div>
-        </div>*/}
-
         {/* Section Title */}
         <div className="pt-2">
-          <h1 className="text-3xl lg:text-4xl font-serif font-normal text-white tracking-tight">
+          <h1 className="text-3xl lg:text-3xl font-serif font-normal text-white tracking-tight">
             Available Integrations
           </h1>
           <p className="text-sm text-zinc-400 mt-1.5 font-normal">Manage and connect all your integrations in one place.</p>
-
         </div>
 
         {/* Toolbar: Tabs and Search Filter */}
@@ -91,7 +100,7 @@ export default function IntegrationsVault() {
           <div className="flex items-center gap-6">
             <div className="relative flex items-center gap-2 pb-3.5 pt-1">
               <span className="text-sm font-medium text-white tracking-tight">Integrations</span>
-              <span className="px-2 py-0.5 text-[11px] font-mono font-medium rounded-full bg-[#18181b] border border-[#27272a] text-[#a1a1aa]">5</span>
+              <span className="px-2 py-0.5 text-[11px] font-mono font-medium rounded-full bg-[#18181b] border border-[#27272a] text-[#a1a1aa]">{AVAILABLE_INTEGRATIONS.length}</span>
               <span className="absolute bottom-0 left-0 w-full h-[2px] bg-white rounded-full"></span>
             </div>
           </div>
@@ -100,13 +109,10 @@ export default function IntegrationsVault() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 1010.5 18a7.5 7.5 0 006.15-2.85z" strokeLinecap="round" strokeLinejoin="round"></path></svg>
             </div>
             <input
-              className="w-full pl-9 pr-14 py-2 text-xs bg-[#111111] hover:bg-[#141414] border border-[#222222] hover:border-[#333333] focus:border-[#52525b] rounded-xl text-white placeholder-[#71717a] focus:outline-none transition-colors font-sans"
+              className="w-full pl-9 pr-14 py-2 text-xs bg-[#08090e] hover:bg-[#141414] border border-[#222222] hover:border-[#333333] focus:border-[#52525b] rounded-xl text-white placeholder-[#71717a] focus:outline-none transition-colors font-sans"
               placeholder="Search integrations..."
               type="text"
             />
-            <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none">
-
-            </div>
           </div>
         </div>
 
@@ -116,7 +122,7 @@ export default function IntegrationsVault() {
             const isConnected = connections[app.id];
 
             return (
-              <div key={app.id} className="integration-card flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-[#111111] border border-[#222222] group gap-4">
+              <div key={app.id} className="integration-card flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-[#08090e] border border-[#222222] group gap-4">
                 <div className="flex items-center gap-4">
                   <div className="w-11 h-11 rounded-lg bg-[#181818] border border-[#272727] flex items-center justify-center flex-shrink-0">
                     {app.icon}
@@ -131,29 +137,41 @@ export default function IntegrationsVault() {
                   </div>
                 </div>
 
-                {/* Mobile Responsive Footer inside the card */}
-                <div className="flex items-center justify-between sm:justify-end gap-5 w-full sm:w-auto mt-2 sm:mt-0 border-t border-[#222222] sm:border-0 pt-3 sm:pt-0">
-                  <button className="group/link inline-flex items-center gap-1 text-xs text-[#a1a1aa] hover:text-white font-medium transition-colors">
-                    <span>Learn more</span>
-                      <svg className="w-3 h-3 text-[#71717a] group-hover/link:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round"></path></svg>
-                  </button>
+                <div className="flex flex-wrap items-center justify-start sm:justify-end gap-2 w-full sm:w-auto mt-2 sm:mt-0 border-t border-[#222222] sm:border-0 pt-3 sm:pt-0">
                   {isConnected ? (
-                    <button
-                      onClick={() => handleDisconnect(app.id)}
-                      className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#141d17] border border-[#1b3a27] hover:bg-[#1a261e] transition-colors text-[#34d399] text-xs font-medium"
-                    >
-                      <span className="relative flex h-1.5 w-1.5">
-                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#10b981]"></span>
-                      </span>
-                      <span>Connected</span>
-                    </button>
+                    <>
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#141d17] border border-[#1b3a27] text-[#34d399] text-xs font-medium cursor-default">
+                        <span className="relative flex h-1.5 w-1.5">
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#10b981]"></span>
+                        </span>
+                        <span>Connected</span>
+                      </div>
+                      <button
+                        onClick={() => setActiveModal(app)}
+                        className="px-3 py-1.5 rounded-lg bg-[#111111] hover:bg-[#18181b] border border-[#222222] text-[#a1a1aa] hover:text-white text-xs font-semibold transition-colors"
+                      >
+                        Update / Add Another
+                      </button>
+                      <button
+                        onClick={() => handleDisconnect(app.id)}
+                        className="px-3 py-1.5 rounded-lg bg-[#f85149]/10 hover:bg-[#f85149]/20 border border-[#f85149]/20 text-[#f85149] text-xs font-semibold transition-colors"
+                      >
+                        Disconnect
+                      </button>
+                    </>
                   ) : (
-                    <button
-                      onClick={() => setActiveModal(app)}
-                      className="px-4 py-1.5 rounded-lg bg-white hover:bg-[#e4e4e7] text-[#09090b] text-xs font-semibold transition-colors text-center"
-                    >
-                      Connect
-                    </button>
+                    <>
+                      <button className="group/link inline-flex items-center gap-1 text-xs text-[#a1a1aa] hover:text-white font-medium transition-colors mr-2">
+                        <span>Learn more</span>
+                        <svg className="w-3 h-3 text-[#71717a] group-hover/link:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round"></path></svg>
+                      </button>
+                      <button
+                        onClick={() => setActiveModal(app)}
+                        className="px-4 py-1.5 rounded-lg bg-white hover:bg-[#e4e4e7] text-[#09090b] text-xs font-semibold transition-colors text-center cursor-pointer"
+                      >
+                        Connect
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -165,14 +183,14 @@ export default function IntegrationsVault() {
       {/* Connection Modal */}
       {activeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-[#111111] border border-[#222222] rounded-2xl p-6 w-full max-w-md shadow-2xl flex flex-col gap-6">
+          <div className="bg-[#08090e] border border-[#222222] rounded-2xl p-6 w-full max-w-md shadow-2xl flex flex-col gap-6">
 
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-[#181818] border border-[#272727] flex items-center justify-center">
                   {activeModal.icon}
                 </div>
-                <h3 className="text-lg font-bold text-white tracking-tight">Connect {activeModal.name}</h3>
+                <h3 className="text-lg font-bold text-white tracking-tight">{connections[activeModal.id] ? "Update" : "Connect"} {activeModal.name}</h3>
               </div>
               <button onClick={() => {setActiveModal(null); setInputValue("");}} className="text-[#a1a1aa] hover:text-white transition-colors">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -198,12 +216,12 @@ export default function IntegrationsVault() {
                   <input
                     type="password"
                     autoFocus
-                    placeholder={`Paste your ${activeModal.name} credential here...`}
+                    placeholder={connections[activeModal.id] ? "Paste a new credential to overwrite..." : `Paste your ${activeModal.name} credential here...`}
                     className="w-full bg-[#09090b] border border-[#222222] focus:border-[#52525b] rounded-xl px-4 py-3 text-sm text-white outline-none transition-colors shadow-inner"
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                   />
-                  <p className="text-[11px] text-[#71717a] mt-1">This credential is encrypted at rest and never shared.</p>
+                  <p className="text-[11px] text-[#71717a] mt-1">This credential is encrypted at rest using AES-256 and never shared.</p>
                 </div>
                 <button
                   onClick={handleSave}

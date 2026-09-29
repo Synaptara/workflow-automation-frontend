@@ -4,7 +4,7 @@ import ReactFlow, { Background, addEdge, useNodesState, useEdgesState, Panel } f
 import "reactflow/dist/style.css";
 
 import { nodeTypes, ConfirmModal } from "../flow/nodes";
-import { getWorkflow, saveSteps } from "../api/workflows";
+import { getWorkflow, saveSteps, getCredentials } from "../api/workflows";
 import { useRunSocket } from "../hooks/useRunSocket";
 import { INTEGRATIONS } from "../config/integrations";
 
@@ -33,12 +33,10 @@ const getEdgeStyling = (sourceHandle) => {
   return { style: { strokeWidth: 2, stroke: "var(--color-border-focus)", strokeDasharray: "5 5" } };
 };
 
-// Converts backend steps to UI nodes, restoring their saved X/Y coordinates
 function stepsToGraph(steps) {
   const nodes = steps.map((s) => ({
     id: s.id,
     type: s.step_type,
-    // Restore the position invisibly saved inside the config JSON!
     position: s.config?.ui_pos || { x: Math.random() * 200 + 100, y: Math.random() * 200 + 100 },
     data: { actionKey: s.action_key, config: s.config, stepType: s.step_type, order: s.order },
   }));
@@ -59,13 +57,11 @@ function stepsToGraph(steps) {
   return { nodes, edges };
 }
 
-// Converts UI nodes to backend steps, invisibly saving X/Y coordinates into the config JSON
 function graphToSteps(nodes, edges) {
   const steps = nodes.map((n) => ({
     client_id: n.id,
     step_type: n.data.stepType,
     action_key: n.data.actionKey || "",
-    // Embed the exact UI coordinates into the backend config so they persist on refresh
     config: { ...n.data.config, ui_pos: n.position },
     order: n.data.order ?? 0,
     parent_client_id: null,
@@ -94,8 +90,11 @@ export default function WorkflowBuilder() {
   const [testPayload, setTestPayload] = useState('{\n  "budget": 6000\n}');
   const [testRunId, setTestRunId] = useState(null);
   const [testError, setTestError] = useState("");
-
   const [edgeToDelete, setEdgeToDelete] = useState(null);
+
+  // NEW: Store vault credentials so the UI knows what is already connected globally
+  const [vaultKeys, setVaultKeys] = useState([]);
+
   const { stepStatus, runStatus } = useRunSocket(testRunId);
 
   const getAvailableVariables = () => {
@@ -131,8 +130,11 @@ export default function WorkflowBuilder() {
   const upstreamActions = selected ? getUpstreamNodes(selected.id, edges, nodes) : [];
 
   useEffect(() => {
-    getWorkflow(id).then((wf) => {
+    // Fetch Workflow and Vault Credentials in parallel
+    Promise.all([getWorkflow(id), getCredentials()]).then(([wf, creds]) => {
       setWorkflow(wf);
+      setVaultKeys(creds);
+
       const { nodes: n, edges: e } = stepsToGraph(wf.steps);
       if (n.length === 0) {
         setNodes([{ id: nextId(), type: "trigger", position: { x: 150, y: window.innerHeight / 2 - 100 }, data: { stepType: "trigger", actionKey: "webhook", config: {}, order: 0 } }]);
@@ -163,7 +165,6 @@ export default function WorkflowBuilder() {
     }
   };
 
-  // --- DRAG AND DROP HANDLERS ---
   const onDragStart = (event, nodeType) => {
     event.dataTransfer.setData('application/reactflow', nodeType);
     event.dataTransfer.effectAllowed = 'move';
@@ -180,7 +181,6 @@ export default function WorkflowBuilder() {
       const type = event.dataTransfer.getData('application/reactflow');
       if (!type || !rfInstance) return;
 
-      // Calculate the exact drop position based on the current zoom/pan state
       const position = rfInstance.screenToFlowPosition({
         x: event.clientX,
         y: event.clientY,
@@ -198,7 +198,6 @@ export default function WorkflowBuilder() {
     },
     [rfInstance, nodes]
   );
-  // ------------------------------
 
   const updateSelectedData = (patch) => {
     setNodes((ns) => ns.map((n) => (n.id === selected.id ? { ...n, data: { ...n.data, ...patch } } : n)));
@@ -249,7 +248,6 @@ export default function WorkflowBuilder() {
         <div className="w-[280px] border-r border-border-default bg-surface flex flex-col z-10 shadow-[5px_0_20px_rgba(0,0,0,0.1)]">
           <div className="p-5 flex flex-col gap-6 flex-1 overflow-y-auto">
 
-            {/* Add Module Cards (Now Draggable!) */}
             <div className="flex flex-col gap-3">
               <span className="text-[10px] font-bold text-text-muted uppercase tracking-widest flex items-center justify-between">
                 Add Module
@@ -342,7 +340,7 @@ export default function WorkflowBuilder() {
                         {runStatus ? runStatus : "RUNNING"}
                       </span>
                     </div>
-                    <Link to={`/workflows/${id}/runs`} className="text-accent text-[11px] font-semibold hover:underline mt-1 flex items-center gap-1">
+                    <Link to={`/history`} className="text-accent text-[11px] font-semibold hover:underline mt-1 flex items-center gap-1">
                       View full run logs <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                     </Link>
                   </div>
@@ -367,8 +365,6 @@ export default function WorkflowBuilder() {
             onDragOver={onDragOver}
             nodeTypes={nodeTypes}
             defaultEdgeOptions={{ type: 'smoothstep', interactionWidth: 40 }}
-
-            /* Enhanced Key Bindings & Behaviors */
             panOnScroll={true}
             zoomActivationKeyCode="Control"
             panActivationKeyCode="Space"
@@ -381,13 +377,11 @@ export default function WorkflowBuilder() {
           >
             <Background color="var(--color-border-subtle)" gap={24} size={2} />
 
-            {/* CUSTOM UI PANELS */}
             <Panel position="bottom-left" className="m-5">
               <div className="group relative">
                 <button className="w-9 h-9 rounded-lg bg-surface border border-border-default flex items-center justify-center text-text-muted hover:text-text-primary hover:border-border-focus transition-all shadow-lg hover:bg-surface-hover">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                 </button>
-                {/* Shortcuts Tooltip */}
                 <div className="absolute bottom-full left-0 mb-3 w-56 bg-surface border border-border-default rounded-xl p-4 shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none translate-y-2 group-hover:translate-y-0">
                   <p className="text-[10px] font-bold text-text-muted mb-3 uppercase tracking-widest">Keyboard Shortcuts</p>
                   <div className="flex flex-col gap-2.5 text-xs text-text-secondary font-medium">
@@ -431,54 +425,91 @@ export default function WorkflowBuilder() {
             </div>
 
             {selected.data.stepType === "trigger" && (
-              <div className="flex flex-col gap-5 animate-in fade-in slide-in-from-right-4 duration-300">
-                <div className="flex flex-col gap-2">
-                  <label className="text-xs font-semibold text-text-primary">Trigger Type</label>
-                  <select
-                    className="bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm font-medium text-text-primary focus:border-accent outline-none shadow-inner cursor-pointer"
-                    value={selected.data.actionKey || "webhook"}
-                    onChange={(e) => updateSelectedData({ actionKey: e.target.value, config: {} })}
-                  >
-                    <option value="webhook">Incoming Webhook</option>
-                    <option value="schedule">Scheduled Interval (Cron)</option>
-                  </select>
-                </div>
+                          <div className="flex flex-col gap-5 animate-in fade-in slide-in-from-right-4 duration-300">
+                            <div className="flex flex-col gap-2">
+                              <label className="text-xs font-semibold text-white">Trigger Type</label>
+                              <select
+                                className="bg-[#09090b] border border-[#222222] rounded-lg px-3 py-2.5 text-sm font-medium text-white focus:border-[#52525b] outline-none shadow-inner cursor-pointer"
+                                value={selected.data.actionKey || "webhook"}
+                                onChange={(e) => updateSelectedData({ actionKey: e.target.value, config: {} })}
+                              >
+                                <option value="webhook">Incoming Webhook</option>
+                                <option value="schedule">Scheduled Interval (Cron)</option>
+                                <option value="trello_new_card">Trello: New Card in List (Polling)</option>
+                              </select>
+                            </div>
 
-                {selected.data.actionKey === "schedule" ? (
-                  <div className="flex flex-col gap-4 mt-2 bg-canvas p-4 rounded-lg border border-border-default shadow-inner">
-                    <div className="flex flex-col gap-2">
-                      <label className="text-xs font-semibold text-text-primary">Interval (Minutes)</label>
-                      <input
-                        type="number"
-                        className="bg-surface border border-border-default rounded-lg px-3 py-2 text-sm text-text-primary focus:border-accent outline-none"
-                        placeholder="15"
-                        value={selected.data.config.interval || ""}
-                        onChange={(e) => updateSelectedData({ config: { ...selected.data.config, interval: e.target.value } })}
-                      />
-                    </div>
-                    <p className="text-[11px] text-text-muted leading-relaxed">
-                      This workflow will run autonomously every <strong className="text-accent">{selected.data.config.interval || 15} minutes</strong> based on the Celery Beat scheduler.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-4 mt-2">
-                    <p className="text-text-muted text-xs leading-relaxed">
-                      Send a POST request to this URL with your JSON payload to trigger the automation.
-                    </p>
-                    <div className="bg-canvas border border-border-default rounded-lg p-4 flex flex-col gap-4 shadow-inner">
-                      <code className="text-xs text-accent break-all font-mono">
-                        {import.meta.env.VITE_API_URL}{workflow?.webhook_url}
-                      </code>
-                      <button onClick={() => navigator.clipboard.writeText(`${import.meta.env.VITE_API_URL}${workflow?.webhook_url}`)}
-                        className="bg-surface-elevated hover:bg-surface-hover border border-border-default text-text-primary px-3 py-2 rounded-md text-xs font-semibold transition-all shadow-md"
-                      >
-                        Copy Webhook URL
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+                            {selected.data.actionKey === "schedule" ? (
+                              <div className="flex flex-col gap-4 mt-2 bg-[#09090b] p-4 rounded-lg border border-[#222222] shadow-inner">
+                                <div className="flex flex-col gap-2">
+                                  <label className="text-xs font-semibold text-white">Interval (Minutes)</label>
+                                  <input
+                                    type="number"
+                                    className="bg-[#111111] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white focus:border-[#52525b] outline-none"
+                                    placeholder="15"
+                                    value={selected.data.config.interval || ""}
+                                    onChange={(e) => updateSelectedData({ config: { ...selected.data.config, interval: e.target.value } })}
+                                  />
+                                </div>
+                                <p className="text-[11px] text-[#71717a] leading-relaxed">
+                                  This workflow will run autonomously every <strong className="text-white">{selected.data.config.interval || 15} minutes</strong>.
+                                </p>
+                              </div>
+                            ) : selected.data.actionKey === "trello_new_card" ? (
+                              <div className="flex flex-col gap-4 mt-2 bg-[#09090b] p-4 rounded-lg border border-[#222222] shadow-inner">
+                                <div className="flex flex-col gap-2">
+                                  <label className="text-xs font-semibold text-white">Trello API Key</label>
+                                  <input
+                                    type="password"
+                                    className="bg-[#111111] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white focus:border-[#52525b] outline-none"
+                                    placeholder="Your API Key"
+                                    value={selected.data.config.key || ""}
+                                    onChange={(e) => updateSelectedData({ config: { ...selected.data.config, key: e.target.value } })}
+                                  />
+                                </div>
+                                <div className="flex flex-col gap-2">
+                                  <label className="text-xs font-semibold text-white">Trello Token</label>
+                                  <input
+                                    type="password"
+                                    className="bg-[#111111] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white focus:border-[#52525b] outline-none"
+                                    placeholder="Your Server Token"
+                                    value={selected.data.config.token || ""}
+                                    onChange={(e) => updateSelectedData({ config: { ...selected.data.config, token: e.target.value } })}
+                                  />
+                                </div>
+                                <div className="flex flex-col gap-2">
+                                  <label className="text-xs font-semibold text-white">List ID</label>
+                                  <input
+                                    type="text"
+                                    className="bg-[#111111] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white focus:border-[#52525b] outline-none"
+                                    placeholder="e.g. 64b81c..."
+                                    value={selected.data.config.list_id || ""}
+                                    onChange={(e) => updateSelectedData({ config: { ...selected.data.config, list_id: e.target.value } })}
+                                  />
+                                </div>
+                                <p className="text-[11px] text-[#71717a] leading-relaxed mt-1">
+                                  Checks this list every 60 seconds. New cards will automatically trigger the workflow and pass their data to downstream nodes as <code className="text-white">trigger.name</code>, <code className="text-white">trigger.desc</code>, etc.
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col gap-4 mt-2">
+                                <p className="text-[#a1a1aa] text-xs leading-relaxed">
+                                  Send a POST request to this URL with your JSON payload to trigger the automation.
+                                </p>
+                                <div className="bg-[#09090b] border border-[#222222] rounded-lg p-4 flex flex-col gap-4 shadow-inner">
+                                  <code className="text-xs text-white break-all font-mono">
+                                    {import.meta.env.VITE_API_URL}{workflow?.webhook_url}
+                                  </code>
+                                  <button onClick={() => navigator.clipboard.writeText(`${import.meta.env.VITE_API_URL}${workflow?.webhook_url}`)}
+                                    className="bg-[#111111] hover:bg-[#18181b] border border-[#222222] text-white px-3 py-2 rounded-md text-xs font-semibold transition-all shadow-md"
+                                  >
+                                    Copy Webhook URL
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
 
             {selected.data.stepType === "condition" && (
               <div className="flex flex-col gap-5">
@@ -548,71 +579,92 @@ export default function WorkflowBuilder() {
               </select>
 
               <div className="flex flex-col gap-6 mt-2">
-                {INTEGRATIONS[selected.data.actionKey]?.fields.map((field) => (
-                  <div key={field.key} className="flex flex-col gap-2">
-                    <label className="text-xs font-semibold text-text-primary">{field.label}</label>
+                {INTEGRATIONS[selected.data.actionKey]?.fields.map((field) => {
 
-                    {field.type === "textarea" ? (
-                      <textarea
-                        className="bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent outline-none transition-colors h-24 resize-none shadow-inner"
-                        placeholder={field.placeholder}
-                        value={selected.data.config[field.key] || ""}
-                        onChange={(e) => updateSelectedData({ config: { ...selected.data.config, [field.key]: e.target.value } })}
-                      />
-                    ) : field.type === "select" ? (
-                      <select
-                        className="bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent outline-none transition-colors shadow-inner appearance-none cursor-pointer"
-                        value={selected.data.config[field.key] || field.options[0].value}
-                        onChange={(e) => updateSelectedData({ config: { ...selected.data.config, [field.key]: e.target.value } })}
-                      >
-                        {field.options.map((opt) => (
-                          <option key={opt.value} value={opt.value}>{opt.label}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input
-                        type="text"
-                        className="bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent outline-none transition-colors shadow-inner"
-                        placeholder={field.placeholder}
-                        value={selected.data.config[field.key] || ""}
-                        onChange={(e) => updateSelectedData({ config: { ...selected.data.config, [field.key]: e.target.value } })}
-                      />
-                    )}
+                  // NEW: Check if this specific field is meant to be a secure auth key (e.g. 'webhook_url' or 'api_key')
+                  // and if the user ALREADY saved it in the global vault!
+                  const isAuthKey = field.key === "webhook_url" || field.key === "api_key";
+                  const isSecuredInVault = isAuthKey && vaultKeys.includes(selected.data.actionKey);
 
-                    <div className="flex flex-col gap-2 mt-1 p-3 bg-canvas rounded-lg border border-border-subtle shadow-inner">
-                      <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">Insert Variables</span>
-                      <div className="flex flex-wrap gap-2">
-                        {getAvailableVariables().map((key) => (
-                          <button key={`trigger-${key}`} type="button"
-                            onClick={() => {
-                              const currentVal = selected.data.config[field.key] || "";
-                              updateSelectedData({ config: { ...selected.data.config, [field.key]: currentVal + `{{trigger.${key}}}` } });
-                            }}
-                            className="text-[11px] font-mono bg-surface border border-border-default px-2 py-1.5 rounded hover:border-accent text-text-secondary transition-all shadow-sm"
-                          >+ trigger.{key}</button>
-                        ))}
-                        {upstreamActions.map((node) => {
-                          const defaultPath = node.data.actionKey === "groq_ai" ? ".reply" : "";
-                          return (
-                            <button key={`upstream-${node.id}`} type="button"
-                              onClick={() => {
-                                const currentVal = selected.data.config[field.key] || "";
-                                updateSelectedData({ config: { ...selected.data.config, [field.key]: currentVal + `{{${node.id}${defaultPath}}}` } });
-                              }}
-                              className="text-[11px] font-mono bg-surface border border-border-default px-2 py-1.5 rounded hover:border-accent text-accent transition-all shadow-sm"
-                            >+ {INTEGRATIONS[node.data.actionKey]?.name || node.data.actionKey}</button>
-                          );
-                        })}
-                        {getAvailableVariables().length === 0 && upstreamActions.length === 0 && (
-                          <span className="text-[11px] text-text-muted italic">No variables available</span>
+                  return (
+                    <div key={field.key} className="flex flex-col gap-2">
+                      <div className="flex justify-between items-center">
+                        <label className="text-xs font-semibold text-text-primary">{field.label}</label>
+                        {/* Dynamic Vault Badge */}
+                        {isSecuredInVault && (
+                          <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-[#34d399] bg-[#141d17] border border-[#1b3a27] px-1.5 py-0.5 rounded">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                            In Vault
+                          </span>
                         )}
                       </div>
+
+                      {field.type === "textarea" ? (
+                        <textarea
+                          className="bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent outline-none transition-colors h-24 resize-none shadow-inner"
+                          placeholder={field.placeholder}
+                          value={selected.data.config[field.key] || ""}
+                          onChange={(e) => updateSelectedData({ config: { ...selected.data.config, [field.key]: e.target.value } })}
+                        />
+                      ) : field.type === "select" ? (
+                        <select
+                          className="bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent outline-none transition-colors shadow-inner appearance-none cursor-pointer"
+                          value={selected.data.config[field.key] || field.options[0].value}
+                          onChange={(e) => updateSelectedData({ config: { ...selected.data.config, [field.key]: e.target.value } })}
+                        >
+                          {field.options.map((opt) => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type={isAuthKey ? "password" : "text"}
+                          autoComplete="new-password"
+                          className={`bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm outline-none transition-colors shadow-inner ${isSecuredInVault && !selected.data.config[field.key] ? 'placeholder-[#34d399]/40 text-[#34d399] focus:border-[#34d399]' : 'text-text-primary focus:border-accent'}`}
+                          placeholder={isSecuredInVault ? "Leave blank to use Vault key, or type to override" : field.placeholder}
+                          value={selected.data.config[field.key] || ""}
+                          onChange={(e) => updateSelectedData({ config: { ...selected.data.config, [field.key]: e.target.value } })}
+                        />
+                      )}
+
+                      {/* Variables Injector Tool */}
+                      {!isAuthKey && (
+                        <div className="flex flex-col gap-2 mt-1 p-3 bg-canvas rounded-lg border border-border-subtle shadow-inner">
+                          <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">Insert Variables</span>
+                          <div className="flex flex-wrap gap-2">
+                            {getAvailableVariables().map((key) => (
+                              <button key={`trigger-${key}`} type="button"
+                                onClick={() => {
+                                  const currentVal = selected.data.config[field.key] || "";
+                                  updateSelectedData({ config: { ...selected.data.config, [field.key]: currentVal + `{{trigger.${key}}}` } });
+                                }}
+                                className="text-[11px] font-mono bg-surface border border-border-default px-2 py-1.5 rounded hover:border-accent text-text-secondary transition-all shadow-sm"
+                              >+ trigger.{key}</button>
+                            ))}
+                            {upstreamActions.map((node) => {
+                              const defaultPath = node.data.actionKey === "groq_ai" ? ".reply" : "";
+                              return (
+                                <button key={`upstream-${node.id}`} type="button"
+                                  onClick={() => {
+                                    const currentVal = selected.data.config[field.key] || "";
+                                    updateSelectedData({ config: { ...selected.data.config, [field.key]: currentVal + `{{${node.id}${defaultPath}}}` } });
+                                  }}
+                                  className="text-[11px] font-mono bg-surface border border-border-default px-2 py-1.5 rounded hover:border-accent text-accent transition-all shadow-sm"
+                                >+ {INTEGRATIONS[node.data.actionKey]?.name || node.data.actionKey}</button>
+                              );
+                            })}
+                            {getAvailableVariables().length === 0 && upstreamActions.length === 0 && (
+                              <span className="text-[11px] text-text-muted italic">No variables available</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
-          )}
+            )}
           </div>
         )}
       </div>
