@@ -1,6 +1,14 @@
+import { useState, useEffect } from "react";
 import Mockup from "../../assets/dashboard-mockup.png"
 
 export default function Hero() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token") || localStorage.getItem("access") || localStorage.getItem("auth_token");
+    setIsLoggedIn(!!token);
+  }, []);
+
   return (
     <section className="relative overflow-hidden w-full">
       {/* Background Gradient */}
@@ -31,11 +39,11 @@ export default function Hero() {
             {/* Call to Action Buttons Aligned Right */}
             <div className="flex flex-wrap items-center justify-start md:justify-end gap-4">
               <a
-                href="/register"
+                href={isLoggedIn ? "/webhooks" : "/register"}
                 className="text-sm font-bold px-7 py-3.5 rounded-full hover:opacity-90 transition-opacity"
                 style={{ backgroundColor: "var(--l-btn-primary-bg)", color: "var(--l-btn-primary-text)" }}
               >
-                Sign up
+                {isLoggedIn ? "Dashboard" : "Sign up"}
               </a>
               <a
                 href="#how-it-works"

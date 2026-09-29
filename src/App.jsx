@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Sidebar from "./components/Sidebar";
@@ -31,11 +31,15 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
-          <Route path="/landing" element={<LandingPage />} />
+          {/* Public Landing Page at Root */}
+          <Route path="/" element={<LandingPage />} />
+
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+
+          {/* Authenticated App Routes */}
           <Route
-            path="/"
+            path="/webhooks"
             element={
               <ProtectedRoute>
                 <Shell>
@@ -44,6 +48,9 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          {/* Optional: Keep /workflows as an alias or redirect */}
+          <Route path="/workflows" element={<Navigate to="/webhooks" replace />} />
+
           <Route
             path="/workflows/:id"
             element={
@@ -65,17 +72,15 @@ export default function App() {
             }
           />
           <Route
-              path="/integrations"
-              element={
-                <ProtectedRoute>
-                  <Shell>
-                    <IntegrationsVault />
-                  </Shell>
-                </ProtectedRoute>
-              }
-
+            path="/integrations"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <IntegrationsVault />
+                </Shell>
+              </ProtectedRoute>
+            }
           />
-
           <Route
             path="/history"
             element={
