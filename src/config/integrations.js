@@ -59,5 +59,14 @@ export const INTEGRATIONS = {
         },
         { key: "prompt", label: "Prompt", type: "textarea", placeholder: "Extract the names from this text: {{trigger.email_body}}" },
       ],
+  },
+  notion: {
+      name: "Notion",
+      fields: [
+        { key: "api_key", label: "Notion API Key", type: "text", placeholder: "secret_..." },
+        { key: "database_id", label: "Database ID", type: "text", placeholder: "e.g. 1a2b3c4d..." },
+        { key: "title", label: "Page Title", type: "text", placeholder: "New Lead: {{trigger.name}}" },
+        { key: "content", label: "Page Content", type: "textarea", placeholder: "Lead email: {{trigger.email}}" }
+      ]
     },
 };

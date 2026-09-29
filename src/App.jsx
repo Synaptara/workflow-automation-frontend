@@ -10,6 +10,7 @@ import WorkflowBuilder from "./pages/WorkflowBuilder";
 import RunHistory from "./pages/RunHistory";
 import IntegrationsVault from "./pages/IntegrationsVault";
 import LandingPage from "./landing/Landingpage.jsx";
+import TemplateGallery from "./pages/TemplateGallery";
 
 function Shell({ children }) {
   return (
@@ -81,6 +82,16 @@ export default function App() {
               <ProtectedRoute>
                 <Shell>
                   <RunHistory />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/templates"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <TemplateGallery />
                 </Shell>
               </ProtectedRoute>
             }

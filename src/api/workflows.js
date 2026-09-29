@@ -11,3 +11,6 @@ export const getGlobalHistory = () => api.get("/runs/history/").then((r) => r.da
 export const getUsage = () => api.get("/usage/").then((r) => r.data);
 export const saveCredential = (service, data) => api.post("/credentials/", { service, data }).then((r) => r.data);
 export const getCredentials = () => api.get("/credentials/").then((r) => r.data);
+// Add these to the bottom of the file
+export const getTemplates = () => api.get("/workflows/templates/").then((r) => r.data);
+export const useTemplate = (data) => api.post("/workflows/use_template/", data).then((r) => r.data);
