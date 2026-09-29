@@ -63,7 +63,7 @@ export default function IntegrationsVault() {
   };
 
   return (
-    <div className="h-full overflow-y-auto px-10 py-7 space-y-7 custom-scrollbar bg-canvas">
+      <div className="h-full overflow-y-auto px-4 sm:px-10 py-6 sm:py-7 space-y-6 sm:space-y-7 custom-scrollbar bg-canvas">
       <div className="max-w-6xl mx-auto flex flex-col gap-6">
 
         {/* Top Banner: Fixed short height across all screens */}
@@ -80,7 +80,7 @@ export default function IntegrationsVault() {
         {/* Section Title */}
         <div className="pt-2">
           <h1 className="text-3xl lg:text-4xl font-serif font-normal text-white tracking-tight">
-            Integrations and connected apps
+            Available Integrations
           </h1>
           <p className="text-sm text-zinc-400 mt-1.5 font-normal">Manage and connect all your integrations in one place.</p>
 
@@ -90,13 +90,13 @@ export default function IntegrationsVault() {
         <div className="flex items-center justify-between border-b border-[#222222] pb-3.5 pt-2">
           <div className="flex items-center gap-6">
             <div className="relative flex items-center gap-2 pb-3.5 pt-1">
-              <span className="text-sm font-medium text-white tracking-tight">All integrations</span>
+              <span className="text-sm font-medium text-white tracking-tight">Integrations</span>
               <span className="px-2 py-0.5 text-[11px] font-mono font-medium rounded-full bg-[#18181b] border border-[#27272a] text-[#a1a1aa]">5</span>
               <span className="absolute bottom-0 left-0 w-full h-[2px] bg-white rounded-full"></span>
             </div>
           </div>
-          <div className="relative w-80 hidden sm:block">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#71717a]">
+          <div className="relative w-full sm:w-80 mt-3 sm:mt-0">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#71717a]">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 1010.5 18a7.5 7.5 0 006.15-2.85z" strokeLinecap="round" strokeLinejoin="round"></path></svg>
             </div>
             <input
@@ -131,10 +131,11 @@ export default function IntegrationsVault() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-5 ml-auto sm:ml-0">
+                {/* Mobile Responsive Footer inside the card */}
+                <div className="flex items-center justify-between sm:justify-end gap-5 w-full sm:w-auto mt-2 sm:mt-0 border-t border-[#222222] sm:border-0 pt-3 sm:pt-0">
                   <button className="group/link inline-flex items-center gap-1 text-xs text-[#a1a1aa] hover:text-white font-medium transition-colors">
                     <span>Learn more</span>
-                    <svg className="w-3 h-3 text-[#71717a] group-hover/link:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round"></path></svg>
+                      <svg className="w-3 h-3 text-[#71717a] group-hover/link:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round"></path></svg>
                   </button>
                   {isConnected ? (
                     <button

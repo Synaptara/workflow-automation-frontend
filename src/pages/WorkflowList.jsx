@@ -31,21 +31,21 @@ export default function WorkflowList() {
   );
 
   return (
-    <main className="flex-1 h-full overflow-y-auto px-6 py-8 lg:px-10 lg:py-9 space-y-8 bg-canvas custom-scrollbar">
+      <main className="flex-1 h-full overflow-y-auto px-4 sm:px-6 py-6 lg:px-10 lg:py-9 space-y-6 sm:space-y-8 bg-canvas custom-scrollbar">
 
-      {/* Page Title & Primary Actions Row */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 max-w-[1400px] mx-auto">
-        <div>
-          <h2 className="font-serif text-3xl md:text-4xl font-normal tracking-tight text-white">Workflows</h2>
-          <p className="text-sm text-zinc-400 mt-1.5 font-normal">Manage and monitor your automated pipelines.</p>
-        </div>
+        {/* Page Title & Primary Actions Row */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 max-w-[1400px] mx-auto">
+          <div>
+            <h2 className="font-serif text-3xl md:text-4xl font-normal tracking-tight text-white">Your workflows</h2>
+            <p className="text-sm text-zinc-400 mt-1.5 font-normal">Manage and monitor your automated pipelines.</p>
+          </div>
 
-        <div>
-          <button
-            onClick={handleCreate}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white hover:bg-zinc-200 text-black text-sm font-semibold shadow-sm transition transform active:scale-95"
-            type="button"
-          >
+          <div className="w-full sm:w-auto">
+            <button
+              onClick={handleCreate}
+              className="w-full sm:w-auto inline-flex justify-center items-center gap-2 px-4 py-2.5 rounded-lg bg-white hover:bg-zinc-200 text-black text-sm font-semibold shadow-sm transition transform active:scale-95"
+              type="button"
+            >
             <svg className="w-4 h-4 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <line x1="12" x2="12" y1="5" y2="19"></line>
               <line x1="5" x2="19" y1="12" y2="12"></line>
@@ -56,15 +56,15 @@ export default function WorkflowList() {
       </div>
 
       {/* Filters & Search Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#1b1b1e] pb-3 max-w-[1400px] mx-auto">
-        <div className="flex items-center gap-6">
-          <div className="relative pb-3 -mb-3.5 border-b-2 border-white flex items-center gap-2">
-            <span className="text-sm font-medium text-white">All workflows</span>
-            <span className="text-[11px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 font-semibold">{workflows.length}</span>
-          </div>
-        </div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#1b1b1e] pb-3 max-w-[1400px] mx-auto">
+              <div className="flex items-center gap-6 overflow-x-auto custom-scrollbar">
+                <div className="relative pb-3 -mb-3.5 border-b-2 border-white flex items-center gap-2 whitespace-nowrap">
+                  <span className="text-sm font-medium text-white">All workflows</span>
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 font-semibold">{workflows.length}</span>
+                </div>
+              </div>
 
-        <div className="relative w-full sm:w-80">
+              <div className="relative w-full sm:w-80 shrink-0 mt-2 sm:mt-0">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-500">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
               <circle cx="11" cy="11" r="8"></circle>

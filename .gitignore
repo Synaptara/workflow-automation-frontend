@@ -23,3 +23,10 @@ dist-ssr
 *.sln
 *.sw?
 .env
+tests
+
+# Playwright
+playwright-report/
+test-results/
+playwright/.cache/
+playwright/.auth/

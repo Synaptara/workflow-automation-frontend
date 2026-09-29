@@ -9,6 +9,7 @@ import WorkflowList from "./pages/WorkflowList";
 import WorkflowBuilder from "./pages/WorkflowBuilder";
 import RunHistory from "./pages/RunHistory";
 import IntegrationsVault from "./pages/IntegrationsVault";
+import LandingPage from "./landing/Landingpage.jsx";
 
 function Shell({ children }) {
   return (
@@ -29,6 +30,7 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
+          <Route path="/landing" element={<LandingPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route
