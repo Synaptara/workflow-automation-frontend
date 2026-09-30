@@ -11,17 +11,19 @@ import {
   FileSheetIcon,
   RobotIcon,
   GithubIcon,
-  GmailIcon,  // Added
-  NotionIcon  // Added
+  GmailIcon,
+  NotionIcon
 } from "../components/icons";
+import { LayoutGrid } from "lucide-react";
 
-const base = "w-[280px] p-4 rounded-2xl flex flex-col gap-3 border transition-all duration-200 shadow-xl relative group cursor-pointer bg-[#111114]";
+const base = "w-[280px] p-4 rounded-2xl flex flex-col gap-3 border transition-colors duration-200 shadow-xl relative group cursor-pointer bg-[#111114]";
 
-function borderClass(selected, liveStatus) {
+function borderClass(selected, liveStatus, isUnconfigured = false) {
   if (liveStatus === "success") return "border-[#10b981] bg-[#10b981]/5 shadow-[0_0_20px_rgba(16,185,129,0.15)]";
   if (liveStatus === "failed") return "border-[#f85149] bg-[#f85149]/5 shadow-[0_0_20px_rgba(248,81,73,0.2)]";
   if (liveStatus === "running") return "border-white bg-white/5 shadow-[0_0_20px_rgba(255,255,255,0.1)] animate-pulse";
   if (selected) return "border-white shadow-[0_0_25px_rgba(255,255,255,0.05)]";
+  if (isUnconfigured) return "border-dashed border-[#404040] hover:border-white bg-[#0a0a0a]";
   return "border-[#232326] hover:border-[#404040]";
 }
 
@@ -36,43 +38,23 @@ const Icons = {
   google_sheets: <FileSheetIcon className="w-[22px] h-[22px]" />,
   groq_ai: <RobotIcon className="w-[22px] h-[22px] text-orange-500" />,
   github: <GithubIcon className="w-[22px] h-[22px] text-[#f4f4f5]" />,
-  email: <GmailIcon className="w-[22px] h-[22px]" />,        // Maps to the Gmail brand
-  gmail: <GmailIcon className="w-[22px] h-[22px]" />,        // Maps to Gmail
-  notion: <NotionIcon className="w-[22px] h-[22px]" />        // Maps to Notion
+  email: <GmailIcon className="w-[22px] h-[22px]" />,
+  gmail: <GmailIcon className="w-[22px] h-[22px]" />,
+  notion: <NotionIcon className="w-[22px] h-[22px]" />
 };
-
-export default function WorkflowNode({ data, selected }) {
-  return (
-    <div className={`${base} ${borderClass(selected, data.liveStatus)}`}>
-      <div className="flex items-center gap-3">
-        <div className="p-2 rounded-xl bg-[#1c1c21] border border-[#27272a] flex items-center justify-center shrink-0">
-          {Icons[data.actionKey] || Icons[data.type] || Icons.action}
-        </div>
-        <div className="flex flex-col min-w-0">
-          <span className="text-sm font-semibold text-white truncate">{data.label || "Workflow Node"}</span>
-          <span className="text-xs text-[#71717a] truncate">{data.description || data.type}</span>
-        </div>
-      </div>
-
-      {/* Handles for React Flow connections */}
-      <Handle type="target" position={Position.Top} className="w-2.5 h-2.5 !bg-[#404040] !border-2 !border-[#111114]" />
-      <Handle type="source" position={Position.Bottom} className="w-2.5 h-2.5 !bg-[#404040] !border-2 !border-[#111114]" />
-    </div>
-  );
-}
 
 export function ConfirmModal({ isOpen, onClose, onConfirm, title, message }) {
   if (!isOpen) return null;
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-[#111111] border border-[#222222] p-6 rounded-2xl shadow-2xl max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={onClose}>
+      <div className="bg-[#111111] border border-[#222222] p-6 rounded-2xl shadow-2xl max-w-sm w-full animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-bold text-white mb-2">{title}</h3>
         <p className="text-sm text-[#a1a1aa] mb-6">{message}</p>
         <div className="flex justify-end gap-3">
           <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-white bg-[#181818] hover:bg-[#222222] border border-[#272727] rounded-lg transition-colors">
             Cancel
           </button>
-          <button onClick={() => { onConfirm(); onClose(); }} className="px-4 py-2 text-sm font-bold text-white bg-[#f85149] hover:bg-[#ff6a63] rounded-lg transition-colors">
+          <button onClick={() => { onConfirm(); onClose(); }} className="px-4 py-2 text-sm font-bold text-white bg-[#f85149] hover:bg-[#ff6a63] rounded-lg transition-colors shadow-[0_0_15px_rgba(248,81,73,0.4)]">
             Delete
           </button>
         </div>
@@ -106,16 +88,16 @@ function DeleteButton({ id }) {
   );
 }
 
-function NodeContent({ icon, title, subtitle, warning }) {
+function NodeContent({ icon, title, subtitle, warning, isBlank }) {
   return (
     <div className="flex flex-col w-full">
       <div className="flex items-center gap-3 w-full">
-        <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-[#181818] border border-[#272727] text-zinc-400 shrink-0 shadow-inner">
+        <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-inner ${isBlank ? 'bg-transparent border border-dashed border-[#404040] text-[#71717a]' : 'bg-[#181818] border border-[#272727] text-zinc-400'}`}>
           {icon}
         </div>
         <div className="flex flex-col flex-1 min-w-0">
-          <span className="text-base font-bold text-white truncate tracking-tight">{title}</span>
-          <span className="text-xs text-[#a1a1aa] mt-0.5 leading-relaxed line-clamp-1">{subtitle}</span>
+          <span className={`text-base font-bold truncate tracking-tight ${isBlank ? 'text-[#a1a1aa]' : 'text-white'}`}>{title}</span>
+          <span className="text-xs text-[#71717a] mt-0.5 leading-relaxed line-clamp-1">{subtitle}</span>
         </div>
       </div>
       {warning && (
@@ -162,18 +144,21 @@ export function ConditionNode({ id, data, selected }) {
 }
 
 export function ActionNode({ id, data, selected }) {
-  const icon = Icons[data.actionKey] || Icons.action;
-  const title = data.actionKey ? data.actionKey.charAt(0).toUpperCase() + data.actionKey.slice(1).replace("_", " ") : "Action Module";
-  const isConfigured = data.config && Object.keys(data.config).length > 0;
+  const isBlank = !data.actionKey;
+  const icon = isBlank ? <LayoutGrid className="w-5 h-5 text-[#52525b]" /> : (Icons[data.actionKey] || Icons.action);
+  const title = isBlank ? "Blank Action" : data.actionKey.charAt(0).toUpperCase() + data.actionKey.slice(1).replace("_", " ");
+
+  const isConfigured = !isBlank && data.config && Object.keys(data.config).length > 0;
 
   return (
-    <div className={`${base} ${borderClass(selected, data.liveStatus)}`}>
+    <div className={`${base} ${borderClass(selected, data.liveStatus, isBlank)}`}>
       <DeleteButton id={id} />
       <NodeContent
+        isBlank={isBlank}
         icon={icon}
         title={title}
-        subtitle={isConfigured ? "Executes action with mapped variables" : "Execute external task"}
-        warning={!isConfigured ? "Configuration Required" : null}
+        subtitle={isBlank ? "Click to select an application" : (isConfigured ? "Executes action with mapped variables" : "Execute external task")}
+        warning={!isBlank && !isConfigured ? "Configuration Required" : null}
       />
       <Handle type="target" position={Position.Left} id="in" className="!bg-[#0a0a0a] !w-3.5 !h-3.5 !border-[2.5px] !border-[#52525b] !left-[-7px]" />
       <Handle type="source" position={Position.Right} id="out" className="!bg-[#0a0a0a] !w-3.5 !h-3.5 !border-[2.5px] !border-white !right-[-7px]" />

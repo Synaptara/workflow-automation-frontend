@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import ReactFlow, { Background, addEdge, useNodesState, useEdgesState, Panel } from "reactflow";
+import ReactFlow, { Background, addEdge, useNodesState, useEdgesState, Panel, ConnectionMode } from "reactflow";
 import "reactflow/dist/style.css";
 
 import { nodeTypes, ConfirmModal } from "../flow/nodes";
@@ -8,9 +8,20 @@ import { getWorkflow, saveSteps, getCredentials } from "../api/workflows";
 import { useRunSocket } from "../hooks/useRunSocket";
 import { INTEGRATIONS } from "../config/integrations";
 
-// --- ICON IMPORTS ---
-import { BlocksIcon, WorkflowIcon, SaveIcon, BotMessageSquareIcon } from "../components/icons";
-import { Play, ExternalLink, HelpCircle, ZoomIn, Maximize, ZoomOut, Lock } from "lucide-react";
+import {
+  BlocksIcon,
+  WorkflowIcon,
+  SaveIcon,
+  BotMessageSquareIcon,
+  NetworkIcon,
+  DiscordIcon,
+  GithubIcon,
+  FileSheetIcon,
+  SlackIcon,
+  RobotIcon
+} from "../components/icons";
+
+import { Play, ExternalLink, HelpCircle, ZoomIn, Maximize, ZoomOut, Lock, Settings2 } from "lucide-react";
 
 let idCounter = 0;
 const nextId = () => `n${Date.now()}_${idCounter++}`;
@@ -38,21 +49,27 @@ const getEdgeStyling = (sourceHandle) => {
 };
 
 function stepsToGraph(steps) {
-  const nodes = steps.map((s) => ({
-    id: s.id,
-    type: s.step_type,
-    position: s.config?.ui_pos || { x: Math.random() * 200 + 100, y: Math.random() * 200 + 100 },
-    data: { actionKey: s.action_key, config: s.config, stepType: s.step_type, order: s.order },
+  // FIX 1: If the DB returned corrupted empty IDs, aggressively assign new ones so React Flow never crashes.
+  const safeSteps = steps.map(s => ({
+    ...s,
+    client_id: s.client_id || nextId()
   }));
 
-  const edges = steps
-    .filter((s) => s.parent)
+  const nodes = safeSteps.map((s) => ({
+    id: s.client_id,
+    type: s.step_type,
+    position: s.config?.ui_pos || { x: Math.random() * 200 + 100, y: Math.random() * 200 + 100 },
+    data: { actionKey: s.action_key, appEvent: s.app_event, config: s.config, stepType: s.step_type, order: s.order },
+  }));
+
+  const edges = safeSteps
+    .filter((s) => s.parent_client_id)
     .map((s) => {
       const sourceHandle = s.branch || "out";
       return {
-        id: `${s.parent}-${s.id}`,
-        source: s.parent,
-        target: s.id,
+        id: `${s.parent_client_id}-${s.client_id}`,
+        source: s.parent_client_id,
+        target: s.client_id,
         sourceHandle: sourceHandle,
         ...getEdgeStyling(sourceHandle)
       };
@@ -62,15 +79,34 @@ function stepsToGraph(steps) {
 }
 
 function graphToSteps(nodes, edges) {
-  const steps = nodes.map((n) => ({
-    client_id: n.id,
-    step_type: n.data.stepType,
-    action_key: n.data.actionKey || "",
-    config: { ...n.data.config, ui_pos: n.position },
-    order: n.data.order ?? 0,
-    parent_client_id: null,
-    branch: "",
-  }));
+  const steps = nodes.map((n) => {
+    let safeConfig = n.data.config;
+
+    // GUARD 1: If config became a raw string, parse it back into an object
+    if (typeof safeConfig === "string") {
+      try {
+        safeConfig = JSON.parse(safeConfig);
+      } catch {
+        safeConfig = {};
+      }
+    }
+
+    // GUARD 2: If config was corrupted into a character-indexed map (e.g. {"0": "{", "1": "'", ...}), wipe it clean
+    if (safeConfig && typeof safeConfig === "object" && safeConfig["0"] !== undefined && safeConfig.field === undefined) {
+      safeConfig = {};
+    }
+
+    return {
+      client_id: n.id,
+      step_type: n.data.stepType,
+      action_key: n.data.actionKey || "",
+      app_event: n.data.appEvent || "",
+      config: { ...(safeConfig || {}), ui_pos: n.position },
+      order: n.data.order ?? 0,
+      parent_client_id: null,
+      branch: "",
+    };
+  });
 
   edges.forEach((e) => {
     const child = steps.find((s) => s.client_id === e.target);
@@ -81,6 +117,22 @@ function graphToSteps(nodes, edges) {
 
   return steps;
 }
+
+const getIntegrationIcon = (key) => {
+  switch (key) {
+    case 'discord': return <DiscordIcon className="w-5 h-5" />;
+    case 'github': return <GithubIcon className="w-5 h-5 text-white" />;
+    case 'google_sheets': return <FileSheetIcon className="w-5 h-5" />;
+    case 'slack': return <SlackIcon className="w-5 h-5" />;
+    case 'groq_ai': return <RobotIcon className="w-5 h-5 text-orange-500" />;
+    case 'notion': return (
+      <div className="w-5 h-5 bg-zinc-100 text-black font-serif font-bold flex items-center justify-center rounded-[4px] text-xs">
+        N
+      </div>
+    );
+    default: return <WorkflowIcon className="w-5 h-5" />;
+  }
+};
 
 export default function WorkflowBuilder() {
   const { id } = useParams();
@@ -97,7 +149,6 @@ export default function WorkflowBuilder() {
   const [edgeToDelete, setEdgeToDelete] = useState(null);
 
   const [vaultKeys, setVaultKeys] = useState([]);
-
   const { stepStatus, runStatus } = useRunSocket(testRunId);
 
   const getAvailableVariables = () => {
@@ -139,7 +190,7 @@ export default function WorkflowBuilder() {
 
       const { nodes: n, edges: e } = stepsToGraph(wf.steps);
       if (n.length === 0) {
-        setNodes([{ id: nextId(), type: "trigger", position: { x: 150, y: window.innerHeight / 2 - 100 }, data: { stepType: "trigger", actionKey: "webhook", config: {}, order: 0 } }]);
+        setNodes([{ id: nextId(), type: "trigger", position: { x: 150, y: window.innerHeight / 2 - 100 }, data: { stepType: "trigger", actionKey: "webhook", appEvent: "", config: {}, order: 0 } }]);
       } else {
         setNodes(n);
         setEdges(e);
@@ -194,7 +245,7 @@ export default function WorkflowBuilder() {
         position,
         data: type === "condition"
             ? { stepType: "condition", config: { field: "", operator: "==", value: "" }, order: nodes.length }
-            : { stepType: "action", actionKey: "slack", config: {}, order: nodes.length },
+            : { stepType: type, actionKey: "", appEvent: "", config: {}, order: nodes.length },
       };
       setNodes((nds) => nds.concat(newNode));
     },
@@ -242,14 +293,89 @@ export default function WorkflowBuilder() {
     }
   };
 
+  const renderField = (field, isAuthKey, isSecuredInVault) => {
+    return (
+      <div key={field.key} className="flex flex-col gap-2">
+        <div className="flex justify-between items-center">
+          <label className="text-xs font-semibold text-text-primary">{field.label}</label>
+          {isSecuredInVault && (
+            <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-[#34d399] bg-[#141d17] border border-[#1b3a27] px-1.5 py-0.5 rounded shadow-sm">
+              <Lock className="w-2.5 h-2.5" /> Vault Secured
+            </span>
+          )}
+        </div>
+
+        {field.type === "textarea" ? (
+          <textarea
+            className="bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent outline-none transition-colors h-24 resize-none shadow-inner"
+            placeholder={field.placeholder}
+            value={selected.data.config[field.key] || ""}
+            onChange={(e) => updateSelectedData({ config: { ...selected.data.config, [field.key]: e.target.value } })}
+          />
+        ) : field.type === "select" ? (
+          <select
+            className="bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent outline-none transition-colors shadow-inner appearance-none cursor-pointer"
+            value={selected.data.config[field.key] || (field.options[0]?.value || "")}
+            onChange={(e) => updateSelectedData({ config: { ...selected.data.config, [field.key]: e.target.value } })}
+          >
+            {field.options.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        ) : (
+          <input
+            type={isAuthKey ? "password" : "text"}
+            autoComplete="new-password"
+            className={`bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm outline-none transition-colors shadow-inner ${isSecuredInVault && !selected.data.config[field.key] ? 'placeholder-[#34d399]/40 text-[#34d399] focus:border-[#34d399]' : 'text-text-primary focus:border-accent'}`}
+            placeholder={isSecuredInVault ? "Leave blank to use Vault connection" : field.placeholder}
+            value={selected.data.config[field.key] || ""}
+            onChange={(e) => updateSelectedData({ config: { ...selected.data.config, [field.key]: e.target.value } })}
+          />
+        )}
+
+        {!isAuthKey && (
+          <div className="flex flex-col gap-2 mt-1 p-3 bg-canvas rounded-lg border border-border-subtle shadow-inner">
+            <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">Insert Variables</span>
+            <div className="flex flex-wrap gap-2">
+              {getAvailableVariables().map((key) => (
+                <button key={`trigger-${key}`} type="button"
+                  onClick={() => {
+                    const currentVal = selected.data.config[field.key] || "";
+                    updateSelectedData({ config: { ...selected.data.config, [field.key]: currentVal + `{{trigger.${key}}}` } });
+                  }}
+                  className="text-[11px] font-mono bg-surface border border-border-default px-2 py-1.5 rounded hover:border-accent text-text-secondary transition-all shadow-sm hover:scale-105"
+                >+ trigger.{key}</button>
+              ))}
+              {upstreamActions.map((node) => {
+                const defaultPath = node.data.actionKey === "groq_ai" ? ".reply" : "";
+                return (
+                  <button key={`upstream-${node.id}`} type="button"
+                    onClick={() => {
+                      const currentVal = selected.data.config[field.key] || "";
+                      updateSelectedData({ config: { ...selected.data.config, [field.key]: currentVal + `{{${node.id}${defaultPath}}}` } });
+                    }}
+                    className="text-[11px] font-mono bg-surface border border-border-default px-2 py-1.5 rounded hover:border-accent text-accent transition-all shadow-sm hover:scale-105"
+                  >+ {INTEGRATIONS[node.data.actionKey]?.name || node.data.actionKey}</button>
+                );
+              })}
+              {getAvailableVariables().length === 0 && upstreamActions.length === 0 && (
+                <span className="text-[11px] text-text-muted italic">No upstream variables available</span>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <>
-      <div className="flex h-full w-full">
+      {/* FIX 2: Added overflow-hidden and h-[100dvh] so the canvas respects boundaries and removes console warnings */}
+      <div className="flex h-[100dvh] w-full overflow-hidden">
 
         {/* LEFT TOOLBAR */}
         <div className="w-[280px] border-r border-border-default bg-surface flex flex-col z-10 shadow-[5px_0_20px_rgba(0,0,0,0.1)]">
           <div className="p-5 flex flex-col gap-6 flex-1 overflow-y-auto">
-
             <div className="flex flex-col gap-3">
               <span className="text-[10px] font-bold text-text-muted uppercase tracking-widest flex items-center justify-between">
                 Add Module
@@ -362,10 +488,12 @@ export default function WorkflowBuilder() {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onNodeClick={(_, node) => setSelected(node)}
+            onPaneClick={() => setSelected(null)}
             onEdgeClick={onEdgeClick}
             onDrop={onDrop}
             onDragOver={onDragOver}
             nodeTypes={nodeTypes}
+            connectionMode={ConnectionMode.Loose}
             defaultEdgeOptions={{ type: 'smoothstep', interactionWidth: 40 }}
             panOnScroll={true}
             zoomActivationKeyCode="Control"
@@ -379,7 +507,6 @@ export default function WorkflowBuilder() {
           >
             <Background color="var(--color-border-subtle)" gap={24} size={2} />
 
-            {/* Bottom Left Panel (Shortcuts Help) */}
             <Panel position="bottom-left" className="m-5">
               <div className="group relative">
                 <button className="w-9 h-9 rounded-lg bg-surface border border-border-default flex items-center justify-center text-text-muted hover:text-text-primary hover:border-border-focus transition-all shadow-lg hover:bg-surface-hover">
@@ -398,7 +525,6 @@ export default function WorkflowBuilder() {
               </div>
             </Panel>
 
-            {/* Bottom Right Panel (Zoom Controls) */}
             <Panel position="bottom-right" className="m-5 flex flex-col gap-2">
               <div className="bg-surface border border-border-default rounded-lg p-1 shadow-lg flex flex-col gap-1">
                 <button onClick={() => rfInstance?.zoomIn({ duration: 300 })} className="w-8 h-8 rounded-md flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-surface-elevated transition-colors">
@@ -414,7 +540,6 @@ export default function WorkflowBuilder() {
                 </button>
               </div>
             </Panel>
-
           </ReactFlow>
         </div>
 
@@ -428,95 +553,9 @@ export default function WorkflowBuilder() {
               <button onClick={() => setSelected(null)} className="text-text-muted hover:text-white text-xl leading-none">&times;</button>
             </div>
 
-            {selected.data.stepType === "trigger" && (
-                          <div className="flex flex-col gap-5 animate-in fade-in slide-in-from-right-4 duration-300">
-                            <div className="flex flex-col gap-2">
-                              <label className="text-xs font-semibold text-white">Trigger Type</label>
-                              <select
-                                className="bg-[#09090b] border border-[#222222] rounded-lg px-3 py-2.5 text-sm font-medium text-white focus:border-[#52525b] outline-none shadow-inner cursor-pointer"
-                                value={selected.data.actionKey || "webhook"}
-                                onChange={(e) => updateSelectedData({ actionKey: e.target.value, config: {} })}
-                              >
-                                <option value="webhook">Incoming Webhook</option>
-                                <option value="schedule">Scheduled Interval (Cron)</option>
-                                <option value="trello_new_card">Trello: New Card in List (Polling)</option>
-                              </select>
-                            </div>
-
-                            {selected.data.actionKey === "schedule" ? (
-                              <div className="flex flex-col gap-4 mt-2 bg-[#09090b] p-4 rounded-lg border border-[#222222] shadow-inner">
-                                <div className="flex flex-col gap-2">
-                                  <label className="text-xs font-semibold text-white">Interval (Minutes)</label>
-                                  <input
-                                    type="number"
-                                    className="bg-[#111111] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white focus:border-[#52525b] outline-none"
-                                    placeholder="15"
-                                    value={selected.data.config.interval || ""}
-                                    onChange={(e) => updateSelectedData({ config: { ...selected.data.config, interval: e.target.value } })}
-                                  />
-                                </div>
-                                <p className="text-[11px] text-[#71717a] leading-relaxed">
-                                  This workflow will run autonomously every <strong className="text-white">{selected.data.config.interval || 15} minutes</strong>.
-                                </p>
-                              </div>
-                            ) : selected.data.actionKey === "trello_new_card" ? (
-                              <div className="flex flex-col gap-4 mt-2 bg-[#09090b] p-4 rounded-lg border border-[#222222] shadow-inner">
-                                <div className="flex flex-col gap-2">
-                                  <label className="text-xs font-semibold text-white">Trello API Key</label>
-                                  <input
-                                    type="password"
-                                    className="bg-[#111111] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white focus:border-[#52525b] outline-none"
-                                    placeholder="Your API Key"
-                                    value={selected.data.config.key || ""}
-                                    onChange={(e) => updateSelectedData({ config: { ...selected.data.config, key: e.target.value } })}
-                                  />
-                                </div>
-                                <div className="flex flex-col gap-2">
-                                  <label className="text-xs font-semibold text-white">Trello Token</label>
-                                  <input
-                                    type="password"
-                                    className="bg-[#111111] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white focus:border-[#52525b] outline-none"
-                                    placeholder="Your Server Token"
-                                    value={selected.data.config.token || ""}
-                                    onChange={(e) => updateSelectedData({ config: { ...selected.data.config, token: e.target.value } })}
-                                  />
-                                </div>
-                                <div className="flex flex-col gap-2">
-                                  <label className="text-xs font-semibold text-white">List ID</label>
-                                  <input
-                                    type="text"
-                                    className="bg-[#111111] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white focus:border-[#52525b] outline-none"
-                                    placeholder="e.g. 64b81c..."
-                                    value={selected.data.config.list_id || ""}
-                                    onChange={(e) => updateSelectedData({ config: { ...selected.data.config, list_id: e.target.value } })}
-                                  />
-                                </div>
-                                <p className="text-[11px] text-[#71717a] leading-relaxed mt-1">
-                                  Checks this list every 60 seconds. New cards will automatically trigger the workflow and pass their data to downstream nodes as <code className="text-white">trigger.name</code>, <code className="text-white">trigger.desc</code>, etc.
-                                </p>
-                              </div>
-                            ) : (
-                              <div className="flex flex-col gap-4 mt-2">
-                                <p className="text-[#a1a1aa] text-xs leading-relaxed">
-                                  Send a POST request to this URL with your JSON payload to trigger the automation.
-                                </p>
-                                <div className="bg-[#09090b] border border-[#222222] rounded-lg p-4 flex flex-col gap-4 shadow-inner">
-                                  <code className="text-xs text-white break-all font-mono">
-                                    {import.meta.env.VITE_API_URL}{workflow?.webhook_url}
-                                  </code>
-                                  <button onClick={() => navigator.clipboard.writeText(`${import.meta.env.VITE_API_URL}${workflow?.webhook_url}`)}
-                                    className="bg-[#111111] hover:bg-[#18181b] border border-[#222222] text-white px-3 py-2 rounded-md text-xs font-semibold transition-all shadow-md"
-                                  >
-                                    Copy Webhook URL
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
+            {/* ROUTER / CONDITION NODE CONFIGURATION */}
             {selected.data.stepType === "condition" && (
-              <div className="flex flex-col gap-5">
+              <div className="flex flex-col gap-5 animate-in fade-in slide-in-from-right-4 duration-300">
                 <div className="flex flex-col gap-2">
                   <label className="text-xs font-semibold text-text-primary">Field to check</label>
                   <input
@@ -525,24 +564,6 @@ export default function WorkflowBuilder() {
                     value={selected.data.config.field || ""}
                     onChange={(e) => updateSelectedData({ config: { ...selected.data.config, field: e.target.value } })}
                   />
-                  <div className="flex flex-col gap-2 mt-2 p-3 bg-canvas rounded-lg border border-border-subtle">
-                    <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">Insert Path</span>
-                    <div className="flex flex-wrap gap-2">
-                      {getAvailableVariables().map((key) => (
-                        <button key={key} onClick={() => updateSelectedData({ config: { ...selected.data.config, field: `trigger.${key}` } })}
-                          className="text-[11px] font-mono bg-surface border border-border-default px-2 py-1.5 rounded hover:border-accent text-text-secondary transition-all shadow-sm"
-                        >+ trigger.{key}</button>
-                      ))}
-                      {upstreamActions.map((node) => {
-                        const defaultPath = node.data.actionKey === "groq_ai" ? ".reply" : "";
-                        return (
-                          <button key={node.id} onClick={() => updateSelectedData({ config: { ...selected.data.config, field: `${node.id}${defaultPath}` } })}
-                            className="text-[11px] font-mono bg-surface border border-border-default px-2 py-1.5 rounded hover:border-accent text-accent transition-all shadow-sm"
-                          >+ {INTEGRATIONS[node.data.actionKey]?.name || node.data.actionKey}</button>
-                        );
-                      })}
-                    </div>
-                  </div>
                 </div>
 
                 <div className="flex flex-col gap-2">
@@ -570,114 +591,155 @@ export default function WorkflowBuilder() {
               </div>
             )}
 
-            {selected.data.stepType === "action" && (
-            <div className="flex flex-col gap-5 animate-in fade-in slide-in-from-right-4 duration-300">
-              <select
-                className="bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm font-medium text-text-primary focus:border-accent outline-none transition-all shadow-inner appearance-none cursor-pointer"
-                value={selected.data.actionKey}
-                onChange={(e) => updateSelectedData({ actionKey: e.target.value, config: {} })}
-              >
-                {Object.entries(INTEGRATIONS).map(([key, config]) => (
-                  <option key={key} value={key}>{config.name}</option>
-                ))}
-              </select>
+            {/* TRIGGER OR ACTION CONFIGURATION (The Hierarchical Stepper) */}
+            {(selected.data.stepType === "trigger" || selected.data.stepType === "action") && (
+              <div className="flex flex-col animate-in fade-in slide-in-from-right-4 duration-300 h-full">
 
-              <div className="flex flex-col gap-6 mt-2">
-                {INTEGRATIONS[selected.data.actionKey]?.fields.map((field) => {
+                {/* STEP 1: SELECT APP */}
+                {!selected.data.actionKey ? (
+                  <div className="flex flex-col gap-6">
+                    <div>
+                      <h3 className="text-sm font-bold text-text-primary mb-1">Choose an Application</h3>
+                      <p className="text-xs text-text-muted">Select an integration for this {selected.data.stepType}.</p>
+                    </div>
 
-                  const isAuthKey = field.key === "webhook_url" || field.key === "api_key";
-                  const isSecuredInVault = isAuthKey && vaultKeys.includes(selected.data.actionKey);
-
-                  return (
-                    <div key={field.key} className="flex flex-col gap-2">
-                      <div className="flex justify-between items-center">
-                        <label className="text-xs font-semibold text-text-primary">{field.label}</label>
-                        {/* Dynamic Vault Badge using Lucide Lock */}
-                        {isSecuredInVault && (
-                          <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-[#34d399] bg-[#141d17] border border-[#1b3a27] px-1.5 py-0.5 rounded">
-                            <Lock className="w-2.5 h-2.5" />
-                            In Vault
-                          </span>
-                        )}
-                      </div>
-
-                      {field.type === "textarea" ? (
-                        <textarea
-                          className="bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent outline-none transition-colors h-24 resize-none shadow-inner"
-                          placeholder={field.placeholder}
-                          value={selected.data.config[field.key] || ""}
-                          onChange={(e) => updateSelectedData({ config: { ...selected.data.config, [field.key]: e.target.value } })}
-                        />
-                      ) : field.type === "select" ? (
-                        <select
-                          className="bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent outline-none transition-colors shadow-inner appearance-none cursor-pointer"
-                          value={selected.data.config[field.key] || field.options[0].value}
-                          onChange={(e) => updateSelectedData({ config: { ...selected.data.config, [field.key]: e.target.value } })}
-                        >
-                          {field.options.map((opt) => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input
-                          type={isAuthKey ? "password" : "text"}
-                          autoComplete="new-password"
-                          className={`bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm outline-none transition-colors shadow-inner ${isSecuredInVault && !selected.data.config[field.key] ? 'placeholder-[#34d399]/40 text-[#34d399] focus:border-[#34d399]' : 'text-text-primary focus:border-accent'}`}
-                          placeholder={isSecuredInVault ? "Leave blank to use Vault key, or type to override" : field.placeholder}
-                          value={selected.data.config[field.key] || ""}
-                          onChange={(e) => updateSelectedData({ config: { ...selected.data.config, [field.key]: e.target.value } })}
-                        />
+                    <div className="flex flex-col gap-3">
+                      <span className="text-[10px] font-bold text-text-muted uppercase tracking-widest">Built-in Modules</span>
+                      {selected.data.stepType === "trigger" && (
+                        <>
+                          <button onClick={() => updateSelectedData({ actionKey: "webhook", appEvent: "webhook_in", config: {} })} className="group flex items-center gap-3 w-full p-3 rounded-xl border border-border-default bg-canvas hover:border-accent transition-all text-left shadow-sm">
+                            <div className="w-10 h-10 rounded-lg bg-surface border border-border-default flex items-center justify-center shadow-inner group-hover:border-accent/30"><NetworkIcon className="w-5 h-5" /></div>
+                            <div className="flex flex-col"><span className="text-sm font-bold text-text-primary">Incoming Webhook</span><span className="text-[10px] text-text-muted">Trigger via HTTP POST</span></div>
+                          </button>
+                          <button onClick={() => updateSelectedData({ actionKey: "schedule", appEvent: "schedule_run", config: {} })} className="group flex items-center gap-3 w-full p-3 rounded-xl border border-border-default bg-canvas hover:border-accent transition-all text-left shadow-sm">
+                            <div className="w-10 h-10 rounded-lg bg-surface border border-border-default flex items-center justify-center shadow-inner group-hover:border-accent/30"><NetworkIcon className="w-5 h-5 text-accent" /></div>
+                            <div className="flex flex-col"><span className="text-sm font-bold text-text-primary">Schedule (Cron)</span><span className="text-[10px] text-text-muted">Run on a fixed interval</span></div>
+                          </button>
+                        </>
                       )}
-
-                      {/* Variables Injector Tool */}
-                      {!isAuthKey && (
-                        <div className="flex flex-col gap-2 mt-1 p-3 bg-canvas rounded-lg border border-border-subtle shadow-inner">
-                          <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">Insert Variables</span>
-                          <div className="flex flex-wrap gap-2">
-                            {getAvailableVariables().map((key) => (
-                              <button key={`trigger-${key}`} type="button"
-                                onClick={() => {
-                                  const currentVal = selected.data.config[field.key] || "";
-                                  updateSelectedData({ config: { ...selected.data.config, [field.key]: currentVal + `{{trigger.${key}}}` } });
-                                }}
-                                className="text-[11px] font-mono bg-surface border border-border-default px-2 py-1.5 rounded hover:border-accent text-text-secondary transition-all shadow-sm"
-                              >+ trigger.{key}</button>
-                            ))}
-                            {upstreamActions.map((node) => {
-                              const defaultPath = node.data.actionKey === "groq_ai" ? ".reply" : "";
-                              return (
-                                <button key={`upstream-${node.id}`} type="button"
-                                  onClick={() => {
-                                    const currentVal = selected.data.config[field.key] || "";
-                                    updateSelectedData({ config: { ...selected.data.config, [field.key]: currentVal + `{{${node.id}${defaultPath}}}` } });
-                                  }}
-                                  className="text-[11px] font-mono bg-surface border border-border-default px-2 py-1.5 rounded hover:border-accent text-accent transition-all shadow-sm"
-                                >+ {INTEGRATIONS[node.data.actionKey]?.name || node.data.actionKey}</button>
-                              );
-                            })}
-                            {getAvailableVariables().length === 0 && upstreamActions.length === 0 && (
-                              <span className="text-[11px] text-text-muted italic">No variables available</span>
-                            )}
-                          </div>
-                        </div>
+                      {selected.data.stepType === "action" && (
+                        <button onClick={() => updateSelectedData({ actionKey: "http", appEvent: "custom_request", config: {} })} className="group flex items-center gap-3 w-full p-3 rounded-xl border border-border-default bg-canvas hover:border-accent transition-all text-left shadow-sm">
+                          <div className="w-10 h-10 rounded-lg bg-surface border border-border-default flex items-center justify-center text-blue-500 shadow-inner group-hover:border-accent/30"><NetworkIcon className="w-5 h-5" /></div>
+                          <div className="flex flex-col"><span className="text-sm font-bold text-text-primary">HTTP Request</span><span className="text-[10px] text-text-muted">Send custom API requests</span></div>
+                        </button>
                       )}
                     </div>
-                  );
-                })}
+
+                    <div className="flex flex-col gap-3">
+                      <span className="text-[10px] font-bold text-text-muted uppercase tracking-widest">Integrations</span>
+                      <div className="grid grid-cols-1 gap-2">
+                        {Object.entries(INTEGRATIONS).filter(([_, config]) =>
+                          (selected.data.stepType === "trigger" ? Object.keys(config.triggers || {}).length > 0 : Object.keys(config.actions || {}).length > 0)
+                        ).map(([key, config]) => (
+                          <button
+                            key={key}
+                            onClick={() => updateSelectedData({ actionKey: key, appEvent: "", config: {} })}
+                            className="group flex items-center gap-3 w-full p-3 rounded-xl border border-border-default bg-canvas hover:border-accent hover:bg-surface-elevated transition-all text-left shadow-sm"
+                          >
+                            <div className="w-10 h-10 rounded-lg bg-surface border border-border-default flex items-center justify-center shadow-inner group-hover:border-accent/30 text-text-secondary">
+                              {getIntegrationIcon(key)}
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-sm font-bold text-text-primary group-hover:text-accent transition-colors">{config.name}</span>
+                            </div>
+                            {vaultKeys.includes(key) && (
+                              <div className="ml-auto flex items-center justify-center w-5 h-5 rounded-full bg-status-success/10 border border-status-success/30 text-status-success">
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                              </div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+
+                  /* STEP 2 & 3: APP SELECTED -> CHOOSE EVENT & CONFIGURE */
+                  <div className="flex flex-col gap-5 animate-in fade-in zoom-in-95 duration-200">
+
+                    <div className="flex items-center justify-between bg-canvas border border-border-default rounded-lg p-2 shadow-inner">
+                      <div className="flex items-center gap-2 px-2">
+                        <WorkflowIcon className="w-4 h-4 text-accent" />
+                        <span className="text-xs font-bold text-white">{INTEGRATIONS[selected.data.actionKey]?.name || selected.data.actionKey.toUpperCase()}</span>
+                      </div>
+                      <button onClick={() => updateSelectedData({ actionKey: "", appEvent: "", config: {} })} className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-md bg-surface hover:bg-surface-hover border border-border-default text-text-muted hover:text-white transition-colors shadow-sm">
+                        Change App
+                      </button>
+                    </div>
+
+                    {/* Step 2: Select Event Dropdown (Skip for built-ins) */}
+                    {INTEGRATIONS[selected.data.actionKey] && (
+                      <div className="flex flex-col gap-2">
+                        <label className="text-xs font-semibold text-text-primary">{selected.data.stepType === "trigger" ? "Trigger Event" : "Action Event"}</label>
+                        <select
+                          className="bg-[#09090b] border border-[#222222] rounded-lg px-3 py-2.5 text-sm font-medium text-white focus:border-[#52525b] outline-none shadow-inner cursor-pointer"
+                          value={selected.data.appEvent || ""}
+                          onChange={(e) => updateSelectedData({ appEvent: e.target.value, config: {} })}
+                        >
+                          <option value="" disabled>Select an event...</option>
+                          {Object.entries(selected.data.stepType === "trigger" ? INTEGRATIONS[selected.data.actionKey].triggers : INTEGRATIONS[selected.data.actionKey].actions).map(([eventKey, eventConfig]) => (
+                            <option key={eventKey} value={eventKey}>{eventConfig.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Step 3: Vault Connection Check & Configuration Mapping */}
+                    {selected.data.appEvent && (
+                      <div className="animate-in slide-in-from-bottom-2 mt-2 pt-5 border-t border-border-subtle">
+                        <div className="flex items-center gap-2 mb-4">
+                          <Settings2 className="w-4 h-4 text-text-muted" />
+                          <h4 className="text-sm font-bold text-white">Setup</h4>
+                        </div>
+
+                        {selected.data.actionKey !== "http" && selected.data.actionKey !== "webhook" && selected.data.actionKey !== "schedule" && !vaultKeys.includes(selected.data.actionKey) ? (
+                          <div className="flex flex-col items-center justify-center text-center p-6 border border-dashed border-border-focus rounded-xl bg-canvas mt-2 shadow-sm">
+                            <div className="w-10 h-10 rounded-full bg-status-danger/10 text-status-danger flex items-center justify-center mb-3 shadow-inner"><Lock className="w-5 h-5" /></div>
+                            <h4 className="text-sm font-bold text-white mb-2">Connection Required</h4>
+                            <p className="text-xs text-text-muted mb-4 leading-relaxed">Please authenticate with {INTEGRATIONS[selected.data.actionKey]?.name} to map these fields.</p>
+                            <Link to="/integrations" target="_blank" className="w-full bg-white text-black hover:bg-gray-200 text-xs font-bold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-md">
+                              Go to Vault <ExternalLink className="w-3.5 h-3.5" />
+                            </Link>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-6">
+                            {/* Special case renders for built-in triggers */}
+                            {selected.data.actionKey === "webhook" && (
+                              <div className="flex flex-col gap-4">
+                                <p className="text-[#a1a1aa] text-xs leading-relaxed">Send a POST request to this URL to trigger this workflow.</p>
+                                <div className="bg-[#09090b] border border-[#222222] rounded-lg p-4 flex flex-col gap-4 shadow-inner">
+                                  <code className="text-xs text-white break-all font-mono">{import.meta.env.VITE_API_URL}{workflow?.webhook_url}</code>
+                                  <button onClick={() => navigator.clipboard.writeText(`${import.meta.env.VITE_API_URL}${workflow?.webhook_url}`)} className="bg-[#111111] border border-[#222222] text-white px-3 py-2 rounded-md text-xs font-semibold">Copy Webhook URL</button>
+                                </div>
+                              </div>
+                            )}
+
+                            {selected.data.actionKey === "schedule" && (
+                              <div className="flex flex-col gap-2">
+                                <label className="text-xs font-semibold text-white">Interval (Minutes)</label>
+                                <input type="number" className="bg-[#111111] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white outline-none" placeholder="15" value={selected.data.config.interval || ""} onChange={(e) => updateSelectedData({ config: { ...selected.data.config, interval: e.target.value } })} />
+                              </div>
+                            )}
+
+                            {/* Standard dynamic field rendering from config */}
+                            {INTEGRATIONS[selected.data.actionKey]?.[selected.data.stepType === "trigger" ? "triggers" : "actions"]?.[selected.data.appEvent]?.fields?.map((field) => {
+                              const isAuthKey = field.key === "webhook_url" || field.key === "api_key";
+                              const isSecuredInVault = isAuthKey && vaultKeys.includes(selected.data.actionKey);
+                              return renderField(field, isAuthKey, isSecuredInVault);
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
             )}
           </div>
         )}
       </div>
 
-      <ConfirmModal
-        isOpen={!!edgeToDelete}
-        onClose={() => setEdgeToDelete(null)}
-        onConfirm={confirmEdgeDelete}
-        title="Remove Connection"
-        message="Are you sure you want to remove this connection line?"
-      />
+      <ConfirmModal isOpen={!!edgeToDelete} onClose={() => setEdgeToDelete(null)} onConfirm={confirmEdgeDelete} title="Remove Connection" message="Are you sure you want to remove this connection line?" />
     </>
   );
 }

@@ -12,6 +12,7 @@ import IntegrationsVault from "./pages/IntegrationsVault";
 import LandingPage from "./landing/Landingpage.jsx";
 import TemplateGallery from "./pages/TemplateGallery";
 import AuthCallback from "./pages/AuthCallback";
+import IntegrationCallback from "./pages/IntegrationCallback";
 
 function Shell({ children }) {
   return (
@@ -82,6 +83,14 @@ export default function App() {
                 <Shell>
                   <IntegrationsVault />
                 </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/integrations/callback/:provider"
+            element={
+              <ProtectedRoute>
+                <IntegrationCallback />
               </ProtectedRoute>
             }
           />
