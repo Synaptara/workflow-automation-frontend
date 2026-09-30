@@ -2,36 +2,56 @@ import { useState, useEffect } from "react";
 import IntegrationPng from "../assets/integrations.jpg";
 import { getCredentials, saveCredential } from "../api/workflows";
 
-const Icons = {
-  discord: (
-    <svg width="22" height="22" viewBox="0 0 16 16" fill="#5865F2" xmlns="http://www.w3.org/2000/svg">
-      <path d="M13.545 2.907a13.2 13.2 0 0 0-3.257-1.011.05.05 0 0 0-.052.025c-.141.25-.297.577-.406.833a12.2 12.2 0 0 0-3.658 0 8 8 0 0 0-.412-.833.05.05 0 0 0-.052-.025c-1.125.194-2.22.534-3.257 1.011a.04.04 0 0 0-.021.018C.356 6.024-.213 9.047.066 12.032q.003.022.021.037a13.3 13.3 0 0 0 3.995 2.02.05.05 0 0 0 .056-.019q.463-.63.818-1.329a.05.05 0 0 0-.01-.059l-.018-.011a9 9 0 0 1-1.248-.595.05.05 0 0 1-.02-.066l.015-.019q.127-.095.248-.195a.05.05 0 0 1 .051-.007c2.619 1.196 5.454 1.196 8.041 0a.05.05 0 0 1 .053.007q.121.1.248.195a.05.05 0 0 1-.004.085 8 8 0 0 1-1.249.594.05.05 0 0 0-.03.03.05.05 0 0 0 .003.041c.24.465.515.909.817 1.329a.05.05 0 0 0 .056.019 13.2 13.2 0 0 0 4.001-2.02.05.05 0 0 0 .021-.037c.334-3.451-.559-6.449-2.366-9.106a.03.03 0 0 0-.02-.019m-8.198 7.307c-.789 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.45.73 1.438 1.613 0 .888-.637 1.612-1.438 1.612m5.316 0c-.788 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613 1.451.73 1.438 1.613c0 .888-.631 1.612-1.438 1.612"/>
-    </svg>
-  ),
-  google_sheets: (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0F9D58" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>
-    </svg>
-  ),
-  groq_ai: (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
-    </svg>
-  ),
-  slack: (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#E01E5A" strokeWidth="1.5"><rect x="13" y="2" width="4" height="8" rx="2"/><rect x="7" y="14" width="4" height="8" rx="2"/><rect x="2" y="7" width="8" height="4" rx="2"/><rect x="14" y="13" width="8" height="4" rx="2"/></svg>
-  ),
-  github: (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.03c3.18-.3 6.5-1.5 6.5-7.07a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3 0 0 0-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2 0 0 0-.1 3.2A4.6 4.6 0 0 0 4 9.5c0 5.58 3.3 6.78 6.5 7.08a4.8 4.8 0 0 0-1 3.03V22"/><path d="M9 20c-5 1.5-5-2.5-7-3"/></svg>
-  )
-};
+// --- ICON IMPORTS ---
+import {
+  DiscordIcon,
+  GoogleDriveIcon,
+  RobotIcon,
+  SlackIcon,
+  GithubIcon,
+  FileSheetIcon
+} from "../components/icons";
+import { Search, ChevronRight, X } from "lucide-react"; // UI icons
 
 const AVAILABLE_INTEGRATIONS = [
-  { id: "groq_ai", name: "Groq AI", description: "Lightning fast open-source language models.", authType: "api_key", configKey: "api_key", icon: Icons.groq_ai },
-  { id: "discord", name: "Discord", description: "Send automated messages to your Discord servers.", authType: "webhook", configKey: "webhook_url", icon: Icons.discord },
-  { id: "github", name: "GitHub", description: "Link pull requests and automate workflows.", authType: "oauth", icon: Icons.github },
-  { id: "google_sheets", name: "Google Sheets", description: "Read and write data to your spreadsheets.", authType: "oauth", icon: Icons.google_sheets },
-  { id: "slack", name: "Slack", description: "Post updates directly to your Slack channels.", authType: "webhook", configKey: "webhook_url", icon: Icons.slack },
+  {
+    id: "groq_ai",
+    name: "Groq AI",
+    description: "Lightning fast open-source language models.",
+    authType: "api_key",
+    configKey: "api_key",
+    icon: <RobotIcon className="w-6 h-6 text-orange-500" />
+  },
+  {
+    id: "discord",
+    name: "Discord",
+    description: "Send automated messages to your Discord servers.",
+    authType: "webhook",
+    configKey: "webhook_url",
+    icon: <DiscordIcon className="w-6 h-6" />
+  },
+  {
+    id: "github",
+    name: "GitHub",
+    description: "Link pull requests and automate workflows.",
+    authType: "oauth",
+    icon: <GithubIcon className="w-6 h-6 text-white" />
+  },
+  {
+    id: "google_sheets",
+    name: "Google Sheets",
+    description: "Read and write data to your spreadsheets.",
+    authType: "oauth",
+    icon: <FileSheetIcon className="w-6 h-6" />
+  },
+  {
+    id: "slack",
+    name: "Slack",
+    description: "Post updates directly to your Slack channels.",
+    authType: "webhook",
+    configKey: "webhook_url",
+    icon: <SlackIcon className="w-6 h-6" />
+  },
 ];
 
 export default function IntegrationsVault() {
@@ -105,8 +125,8 @@ export default function IntegrationsVault() {
             </div>
           </div>
           <div className="relative w-full sm:w-80 mt-3 sm:mt-0">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#71717a]">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 1010.5 18a7.5 7.5 0 006.15-2.85z" strokeLinecap="round" strokeLinejoin="round"></path></svg>
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#71717a]">
+              <Search className="w-4 h-4" />
             </div>
             <input
               className="w-full pl-9 pr-14 py-2 text-xs bg-[#08090e] hover:bg-[#141414] border border-[#222222] hover:border-[#333333] focus:border-[#52525b] rounded-xl text-white placeholder-[#71717a] focus:outline-none transition-colors font-sans"
@@ -163,7 +183,7 @@ export default function IntegrationsVault() {
                     <>
                       <button className="group/link inline-flex items-center gap-1 text-xs text-[#a1a1aa] hover:text-white font-medium transition-colors mr-2">
                         <span>Learn more</span>
-                        <svg className="w-3 h-3 text-[#71717a] group-hover/link:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round"></path></svg>
+                        <ChevronRight className="w-3 h-3 text-[#71717a] group-hover/link:translate-x-0.5 transition-transform" />
                       </button>
                       <button
                         onClick={() => setActiveModal(app)}
@@ -193,7 +213,7 @@ export default function IntegrationsVault() {
                 <h3 className="text-lg font-bold text-white tracking-tight">{connections[activeModal.id] ? "Update" : "Connect"} {activeModal.name}</h3>
               </div>
               <button onClick={() => {setActiveModal(null); setInputValue("");}} className="text-[#a1a1aa] hover:text-white transition-colors">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                <X className="w-5 h-5" />
               </button>
             </div>
 

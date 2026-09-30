@@ -11,6 +11,7 @@ import RunHistory from "./pages/RunHistory";
 import IntegrationsVault from "./pages/IntegrationsVault";
 import LandingPage from "./landing/Landingpage.jsx";
 import TemplateGallery from "./pages/TemplateGallery";
+import AuthCallback from "./pages/AuthCallback";
 
 function Shell({ children }) {
   return (
@@ -36,6 +37,9 @@ export default function App() {
 
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+
+          {/* Catch the OAuth redirects */}
+          <Route path="/auth/callback/:provider" element={<AuthCallback />} />
 
           {/* Authenticated App Routes */}
           <Route

@@ -8,6 +8,10 @@ import { getWorkflow, saveSteps, getCredentials } from "../api/workflows";
 import { useRunSocket } from "../hooks/useRunSocket";
 import { INTEGRATIONS } from "../config/integrations";
 
+// --- ICON IMPORTS ---
+import { BlocksIcon, WorkflowIcon, SaveIcon, BotMessageSquareIcon } from "../components/icons";
+import { Play, ExternalLink, HelpCircle, ZoomIn, Maximize, ZoomOut, Lock } from "lucide-react";
+
 let idCounter = 0;
 const nextId = () => `n${Date.now()}_${idCounter++}`;
 
@@ -92,7 +96,6 @@ export default function WorkflowBuilder() {
   const [testError, setTestError] = useState("");
   const [edgeToDelete, setEdgeToDelete] = useState(null);
 
-  // NEW: Store vault credentials so the UI knows what is already connected globally
   const [vaultKeys, setVaultKeys] = useState([]);
 
   const { stepStatus, runStatus } = useRunSocket(testRunId);
@@ -130,7 +133,6 @@ export default function WorkflowBuilder() {
   const upstreamActions = selected ? getUpstreamNodes(selected.id, edges, nodes) : [];
 
   useEffect(() => {
-    // Fetch Workflow and Vault Credentials in parallel
     Promise.all([getWorkflow(id), getCredentials()]).then(([wf, creds]) => {
       setWorkflow(wf);
       setVaultKeys(creds);
@@ -260,7 +262,7 @@ export default function WorkflowBuilder() {
                 className="group flex items-center gap-3 w-full p-2.5 rounded-lg border border-border-default bg-canvas hover:border-accent hover:bg-surface-elevated transition-all text-left shadow-sm cursor-grab active:cursor-grabbing"
               >
                 <div className="w-9 h-9 rounded-md bg-surface border border-border-default flex items-center justify-center text-text-secondary group-hover:text-accent group-hover:border-accent/30 transition-colors shadow-inner">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 3v18M18 9V3M18 21v-6M12 15V9"/></svg>
+                  <BlocksIcon className="w-[18px] h-[18px] stroke-[2]" />
                 </div>
                 <div className="flex flex-col">
                   <span className="text-sm font-bold text-text-primary">Router</span>
@@ -274,7 +276,7 @@ export default function WorkflowBuilder() {
                 className="group flex items-center gap-3 w-full p-2.5 rounded-lg border border-border-default bg-canvas hover:border-accent hover:bg-surface-elevated transition-all text-left shadow-sm cursor-grab active:cursor-grabbing"
               >
                 <div className="w-9 h-9 rounded-md bg-surface border border-border-default flex items-center justify-center text-text-secondary group-hover:text-accent group-hover:border-accent/30 transition-colors shadow-inner">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                  <WorkflowIcon className="w-[18px] h-[18px] stroke-[2]" />
                 </div>
                 <div className="flex flex-col">
                   <span className="text-sm font-bold text-text-primary">Action</span>
@@ -290,7 +292,7 @@ export default function WorkflowBuilder() {
               disabled={saving}
               className="w-full bg-accent hover:bg-accent-hover text-black text-sm font-bold py-2.5 rounded-lg transition-all disabled:opacity-50 shadow-[0_0_15px_rgba(124,92,255,0.3)] flex items-center justify-center gap-2"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              <SaveIcon className="w-4 h-4" />
               {saving ? "Saving..." : "Save Workflow"}
             </button>
 
@@ -303,7 +305,7 @@ export default function WorkflowBuilder() {
             {workflow && (
               <div className="mt-2 flex flex-col gap-3">
                 <span className="text-[10px] font-bold text-text-muted uppercase tracking-widest flex items-center gap-1.5">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                  <BotMessageSquareIcon className="w-3.5 h-3.5" />
                   Test Trigger Payload
                 </span>
 
@@ -322,7 +324,7 @@ export default function WorkflowBuilder() {
                   onClick={handleTestRun}
                   className="w-full text-sm font-bold py-2.5 rounded-lg bg-surface-elevated border border-border-default hover:border-text-primary hover:bg-surface-hover text-text-primary transition-all flex items-center justify-center gap-2 shadow-sm"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  <Play className="w-3.5 h-3.5 fill-current" />
                   Fire Payload
                 </button>
 
@@ -340,8 +342,8 @@ export default function WorkflowBuilder() {
                         {runStatus ? runStatus : "RUNNING"}
                       </span>
                     </div>
-                    <Link to={`/history`} className="text-accent text-[11px] font-semibold hover:underline mt-1 flex items-center gap-1">
-                      View full run logs <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    <Link to={`/history`} className="text-accent text-[11px] font-semibold hover:underline mt-1 flex items-center gap-1.5">
+                      View full run logs <ExternalLink className="w-3 h-3" />
                     </Link>
                   </div>
                 )}
@@ -377,10 +379,11 @@ export default function WorkflowBuilder() {
           >
             <Background color="var(--color-border-subtle)" gap={24} size={2} />
 
+            {/* Bottom Left Panel (Shortcuts Help) */}
             <Panel position="bottom-left" className="m-5">
               <div className="group relative">
                 <button className="w-9 h-9 rounded-lg bg-surface border border-border-default flex items-center justify-center text-text-muted hover:text-text-primary hover:border-border-focus transition-all shadow-lg hover:bg-surface-hover">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <HelpCircle className="w-4 h-4" />
                 </button>
                 <div className="absolute bottom-full left-0 mb-3 w-56 bg-surface border border-border-default rounded-xl p-4 shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none translate-y-2 group-hover:translate-y-0">
                   <p className="text-[10px] font-bold text-text-muted mb-3 uppercase tracking-widest">Keyboard Shortcuts</p>
@@ -395,18 +398,19 @@ export default function WorkflowBuilder() {
               </div>
             </Panel>
 
+            {/* Bottom Right Panel (Zoom Controls) */}
             <Panel position="bottom-right" className="m-5 flex flex-col gap-2">
               <div className="bg-surface border border-border-default rounded-lg p-1 shadow-lg flex flex-col gap-1">
                 <button onClick={() => rfInstance?.zoomIn({ duration: 300 })} className="w-8 h-8 rounded-md flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-surface-elevated transition-colors">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  <ZoomIn className="w-4 h-4" />
                 </button>
                 <div className="h-px w-6 bg-border-subtle mx-auto"></div>
                 <button onClick={() => rfInstance?.fitView({ duration: 800, padding: 0.3 })} className="w-8 h-8 rounded-md flex items-center justify-center text-[#71717a] hover:text-white hover:bg-[#18181b] transition-colors">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>
+                  <Maximize className="w-3.5 h-3.5" />
                 </button>
                 <div className="h-px w-6 bg-border-subtle mx-auto"></div>
                 <button onClick={() => rfInstance?.zoomOut({ duration: 300 })} className="w-8 h-8 rounded-md flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-surface-elevated transition-colors">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  <ZoomOut className="w-4 h-4" />
                 </button>
               </div>
             </Panel>
@@ -581,8 +585,6 @@ export default function WorkflowBuilder() {
               <div className="flex flex-col gap-6 mt-2">
                 {INTEGRATIONS[selected.data.actionKey]?.fields.map((field) => {
 
-                  // NEW: Check if this specific field is meant to be a secure auth key (e.g. 'webhook_url' or 'api_key')
-                  // and if the user ALREADY saved it in the global vault!
                   const isAuthKey = field.key === "webhook_url" || field.key === "api_key";
                   const isSecuredInVault = isAuthKey && vaultKeys.includes(selected.data.actionKey);
 
@@ -590,10 +592,10 @@ export default function WorkflowBuilder() {
                     <div key={field.key} className="flex flex-col gap-2">
                       <div className="flex justify-between items-center">
                         <label className="text-xs font-semibold text-text-primary">{field.label}</label>
-                        {/* Dynamic Vault Badge */}
+                        {/* Dynamic Vault Badge using Lucide Lock */}
                         {isSecuredInVault && (
                           <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-[#34d399] bg-[#141d17] border border-[#1b3a27] px-1.5 py-0.5 rounded">
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                            <Lock className="w-2.5 h-2.5" />
                             In Vault
                           </span>
                         )}

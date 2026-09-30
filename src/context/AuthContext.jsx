@@ -14,18 +14,26 @@ export function AuthProvider({ children }) {
   };
 
   const register = async (username, email, password) => {
-    await api.post("/auth/register/", { username, email, password });
-    await login(username, password);
-  };
+      await api.post("/auth/register/", { username, email, password });
+      await login(username, password);
+    };
 
-  const logout = () => {
+    // NEW: Handle OAuth login payload from Django
+    const oauthLogin = async (provider, code) => {
+      const { data } = await api.post(`/auth/social/${provider}/`, { code });
+      localStorage.setItem("access", data.access);
+      localStorage.setItem("refresh", data.refresh);
+      setIsAuthenticated(true);
+    };
+
+    const logout = () => {
     localStorage.removeItem("access");
     localStorage.removeItem("refresh");
     setIsAuthenticated(false);
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, login, register, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, oauthLogin, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );
