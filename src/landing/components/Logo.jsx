@@ -5,7 +5,7 @@ export default function Logo({ src = "/logo.svg", size = 28, className = "" }) {
   return (
     <img
       src={src}
-      alt="Flowly"
+      alt="Orkflo"
       width={size}
       height={size}
       className={className}
