@@ -21,7 +21,8 @@ import {
   RobotIcon
 } from "../components/icons";
 
-import { Play, ExternalLink, HelpCircle, ZoomIn, Maximize, ZoomOut, Lock, Settings2 } from "lucide-react";
+// ADDED Mail ICON
+import { Play, ExternalLink, HelpCircle, ZoomIn, Maximize, ZoomOut, Lock, Settings2, Mail } from "lucide-react";
 
 let idCounter = 0;
 const nextId = () => `n${Date.now()}_${idCounter++}`;
@@ -49,7 +50,6 @@ const getEdgeStyling = (sourceHandle) => {
 };
 
 function stepsToGraph(steps) {
-  // FIX 1: If the DB returned corrupted empty IDs, aggressively assign new ones so React Flow never crashes.
   const safeSteps = steps.map(s => ({
     ...s,
     client_id: s.client_id || nextId()
@@ -82,7 +82,6 @@ function graphToSteps(nodes, edges) {
   const steps = nodes.map((n) => {
     let safeConfig = n.data.config;
 
-    // GUARD 1: If config became a raw string, parse it back into an object
     if (typeof safeConfig === "string") {
       try {
         safeConfig = JSON.parse(safeConfig);
@@ -91,7 +90,6 @@ function graphToSteps(nodes, edges) {
       }
     }
 
-    // GUARD 2: If config was corrupted into a character-indexed map (e.g. {"0": "{", "1": "'", ...}), wipe it clean
     if (safeConfig && typeof safeConfig === "object" && safeConfig["0"] !== undefined && safeConfig.field === undefined) {
       safeConfig = {};
     }
@@ -118,6 +116,7 @@ function graphToSteps(nodes, edges) {
   return steps;
 }
 
+// ADDED EMAIL ICON SUPPORT
 const getIntegrationIcon = (key) => {
   switch (key) {
     case 'discord': return <DiscordIcon className="w-5 h-5" />;
@@ -125,6 +124,7 @@ const getIntegrationIcon = (key) => {
     case 'google_sheets': return <FileSheetIcon className="w-5 h-5" />;
     case 'slack': return <SlackIcon className="w-5 h-5" />;
     case 'groq_ai': return <RobotIcon className="w-5 h-5 text-orange-500" />;
+    case 'email': return <Mail className="w-5 h-5 text-blue-400" />;
     case 'notion': return (
       <div className="w-5 h-5 bg-zinc-100 text-black font-serif font-bold flex items-center justify-center rounded-[4px] text-xs">
         N
@@ -370,8 +370,7 @@ export default function WorkflowBuilder() {
 
   return (
     <>
-      {/* FIX 2: Added overflow-hidden and h-[100dvh] so the canvas respects boundaries and removes console warnings */}
-      <div className="flex h-[100dvh] w-full overflow-hidden">
+      <div className="flex flex-1 w-full relative overflow-hidden h-full">
 
         {/* LEFT TOOLBAR */}
         <div className="w-[280px] border-r border-border-default bg-surface flex flex-col z-10 shadow-[5px_0_20px_rgba(0,0,0,0.1)]">
@@ -545,8 +544,9 @@ export default function WorkflowBuilder() {
 
         {/* RIGHT CONFIGURATION SIDEBAR */}
         {selected && (
-          <div className="w-[340px] border-l border-border-default bg-surface p-6 z-10 shadow-[-10px_0_20px_rgba(0,0,0,0.3)] flex flex-col overflow-y-auto">
-            <div className="flex items-center justify-between mb-5 pb-3 border-b border-border-subtle">
+          // CSS FIX: Added `max-w-full` so it doesn't break boundaries, and reduced horizontal padding slightly.
+          <div className="w-[340px] max-w-[85vw] border-l border-border-default bg-surface px-5 py-6 z-10 shadow-[-10px_0_20px_rgba(0,0,0,0.3)] flex flex-col overflow-y-auto custom-scrollbar">
+            <div className="flex items-center justify-between mb-5 pb-3 border-b border-border-subtle shrink-0">
               <p className="text-text-muted text-[10px] font-bold uppercase tracking-widest">
                 Configure Module
               </p>
@@ -559,7 +559,7 @@ export default function WorkflowBuilder() {
                 <div className="flex flex-col gap-2">
                   <label className="text-xs font-semibold text-text-primary">Field to check</label>
                   <input
-                    className="bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent outline-none transition-colors shadow-inner"
+                    className="w-full bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent outline-none transition-colors shadow-inner"
                     placeholder="e.g. trigger.budget"
                     value={selected.data.config.field || ""}
                     onChange={(e) => updateSelectedData({ config: { ...selected.data.config, field: e.target.value } })}
@@ -569,7 +569,7 @@ export default function WorkflowBuilder() {
                 <div className="flex flex-col gap-2">
                   <label className="text-xs font-semibold text-text-primary">Condition Operator</label>
                   <select
-                    className="bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent outline-none transition-colors shadow-inner appearance-none cursor-pointer"
+                    className="w-full bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent outline-none transition-colors shadow-inner appearance-none cursor-pointer"
                     value={selected.data.config.operator || "=="}
                     onChange={(e) => updateSelectedData({ config: { ...selected.data.config, operator: e.target.value } })}
                   >
@@ -582,7 +582,7 @@ export default function WorkflowBuilder() {
                 <div className="flex flex-col gap-2">
                   <label className="text-xs font-semibold text-text-primary">Target Value</label>
                   <input
-                    className="bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent outline-none transition-colors shadow-inner"
+                    className="w-full bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent outline-none transition-colors shadow-inner"
                     placeholder="e.g. 5000"
                     value={selected.data.config.value || ""}
                     onChange={(e) => updateSelectedData({ config: { ...selected.data.config, value: e.target.value } })}
@@ -597,7 +597,7 @@ export default function WorkflowBuilder() {
 
                 {/* STEP 1: SELECT APP */}
                 {!selected.data.actionKey ? (
-                  <div className="flex flex-col gap-6">
+                  <div className="flex flex-col gap-6 pb-6">
                     <div>
                       <h3 className="text-sm font-bold text-text-primary mb-1">Choose an Application</h3>
                       <p className="text-xs text-text-muted">Select an integration for this {selected.data.stepType}.</p>
@@ -608,19 +608,22 @@ export default function WorkflowBuilder() {
                       {selected.data.stepType === "trigger" && (
                         <>
                           <button onClick={() => updateSelectedData({ actionKey: "webhook", appEvent: "webhook_in", config: {} })} className="group flex items-center gap-3 w-full p-3 rounded-xl border border-border-default bg-canvas hover:border-accent transition-all text-left shadow-sm">
-                            <div className="w-10 h-10 rounded-lg bg-surface border border-border-default flex items-center justify-center shadow-inner group-hover:border-accent/30"><NetworkIcon className="w-5 h-5" /></div>
-                            <div className="flex flex-col"><span className="text-sm font-bold text-text-primary">Incoming Webhook</span><span className="text-[10px] text-text-muted">Trigger via HTTP POST</span></div>
+                            <div className="w-10 h-10 shrink-0 rounded-lg bg-surface border border-border-default flex items-center justify-center shadow-inner group-hover:border-accent/30"><NetworkIcon className="w-5 h-5" /></div>
+                            <div className="flex flex-col truncate"><span className="text-sm font-bold text-text-primary truncate">Incoming Webhook</span><span className="text-[10px] text-text-muted truncate">Trigger via HTTP POST</span></div>
                           </button>
                           <button onClick={() => updateSelectedData({ actionKey: "schedule", appEvent: "schedule_run", config: {} })} className="group flex items-center gap-3 w-full p-3 rounded-xl border border-border-default bg-canvas hover:border-accent transition-all text-left shadow-sm">
-                            <div className="w-10 h-10 rounded-lg bg-surface border border-border-default flex items-center justify-center shadow-inner group-hover:border-accent/30"><NetworkIcon className="w-5 h-5 text-accent" /></div>
-                            <div className="flex flex-col"><span className="text-sm font-bold text-text-primary">Schedule (Cron)</span><span className="text-[10px] text-text-muted">Run on a fixed interval</span></div>
+                            <div className="w-10 h-10 shrink-0 rounded-lg bg-surface border border-border-default flex items-center justify-center shadow-inner group-hover:border-accent/30"><NetworkIcon className="w-5 h-5 text-accent" /></div>
+                            <div className="flex flex-col truncate"><span className="text-sm font-bold text-text-primary truncate">Schedule (Cron)</span><span className="text-[10px] text-text-muted truncate">Run on a fixed interval</span></div>
                           </button>
                         </>
                       )}
                       {selected.data.stepType === "action" && (
-                        <button onClick={() => updateSelectedData({ actionKey: "http", appEvent: "custom_request", config: {} })} className="group flex items-center gap-3 w-full p-3 rounded-xl border border-border-default bg-canvas hover:border-accent transition-all text-left shadow-sm">
-                          <div className="w-10 h-10 rounded-lg bg-surface border border-border-default flex items-center justify-center text-blue-500 shadow-inner group-hover:border-accent/30"><NetworkIcon className="w-5 h-5" /></div>
-                          <div className="flex flex-col"><span className="text-sm font-bold text-text-primary">HTTP Request</span><span className="text-[10px] text-text-muted">Send custom API requests</span></div>
+                        <button onClick={() => updateSelectedData({ actionKey: "http", appEvent: "custom_request", config: {} })} className="group flex items-center gap-3 w-full p-3 rounded-xl border border-border-default bg-canvas hover:border-accent transition-all text-left shadow-sm overflow-hidden">
+                          <div className="w-10 h-10 shrink-0 rounded-lg bg-surface border border-border-default flex items-center justify-center text-blue-500 shadow-inner group-hover:border-accent/30"><NetworkIcon className="w-5 h-5" /></div>
+                          <div className="flex flex-col flex-1 min-w-0">
+                            <span className="text-sm font-bold text-text-primary truncate block w-full">HTTP Request</span>
+                            <span className="text-[10px] text-text-muted truncate block w-full">Send custom API requests</span>
+                          </div>
                         </button>
                       )}
                     </div>
@@ -634,16 +637,16 @@ export default function WorkflowBuilder() {
                           <button
                             key={key}
                             onClick={() => updateSelectedData({ actionKey: key, appEvent: "", config: {} })}
-                            className="group flex items-center gap-3 w-full p-3 rounded-xl border border-border-default bg-canvas hover:border-accent hover:bg-surface-elevated transition-all text-left shadow-sm"
+                            className="group flex items-center gap-3 w-full p-3 rounded-xl border border-border-default bg-canvas hover:border-accent hover:bg-surface-elevated transition-all text-left shadow-sm overflow-hidden"
                           >
-                            <div className="w-10 h-10 rounded-lg bg-surface border border-border-default flex items-center justify-center shadow-inner group-hover:border-accent/30 text-text-secondary">
+                            <div className="w-10 h-10 shrink-0 rounded-lg bg-surface border border-border-default flex items-center justify-center shadow-inner group-hover:border-accent/30 text-text-secondary">
                               {getIntegrationIcon(key)}
                             </div>
-                            <div className="flex flex-col">
-                              <span className="text-sm font-bold text-text-primary group-hover:text-accent transition-colors">{config.name}</span>
+                            <div className="flex flex-col flex-1 min-w-0">
+                              <span className="text-sm font-bold text-text-primary group-hover:text-accent transition-colors truncate block w-full">{config.name}</span>
                             </div>
                             {vaultKeys.includes(key) && (
-                              <div className="ml-auto flex items-center justify-center w-5 h-5 rounded-full bg-status-success/10 border border-status-success/30 text-status-success">
+                              <div className="shrink-0 ml-auto flex items-center justify-center w-5 h-5 rounded-full bg-status-success/10 border border-status-success/30 text-status-success">
                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                               </div>
                             )}
@@ -655,14 +658,14 @@ export default function WorkflowBuilder() {
                 ) : (
 
                   /* STEP 2 & 3: APP SELECTED -> CHOOSE EVENT & CONFIGURE */
-                  <div className="flex flex-col gap-5 animate-in fade-in zoom-in-95 duration-200">
+                  <div className="flex flex-col gap-5 animate-in fade-in zoom-in-95 duration-200 pb-6">
 
-                    <div className="flex items-center justify-between bg-canvas border border-border-default rounded-lg p-2 shadow-inner">
-                      <div className="flex items-center gap-2 px-2">
-                        <WorkflowIcon className="w-4 h-4 text-accent" />
-                        <span className="text-xs font-bold text-white">{INTEGRATIONS[selected.data.actionKey]?.name || selected.data.actionKey.toUpperCase()}</span>
+                    <div className="flex items-center justify-between bg-canvas border border-border-default rounded-lg p-2 shadow-inner w-full">
+                      <div className="flex items-center gap-2 px-2 overflow-hidden">
+                        <WorkflowIcon className="w-4 h-4 text-accent shrink-0" />
+                        <span className="text-xs font-bold text-white truncate">{INTEGRATIONS[selected.data.actionKey]?.name || selected.data.actionKey.toUpperCase()}</span>
                       </div>
-                      <button onClick={() => updateSelectedData({ actionKey: "", appEvent: "", config: {} })} className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-md bg-surface hover:bg-surface-hover border border-border-default text-text-muted hover:text-white transition-colors shadow-sm">
+                      <button onClick={() => updateSelectedData({ actionKey: "", appEvent: "", config: {} })} className="shrink-0 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-md bg-surface hover:bg-surface-hover border border-border-default text-text-muted hover:text-white transition-colors shadow-sm">
                         Change App
                       </button>
                     </div>
@@ -672,7 +675,7 @@ export default function WorkflowBuilder() {
                       <div className="flex flex-col gap-2">
                         <label className="text-xs font-semibold text-text-primary">{selected.data.stepType === "trigger" ? "Trigger Event" : "Action Event"}</label>
                         <select
-                          className="bg-[#09090b] border border-[#222222] rounded-lg px-3 py-2.5 text-sm font-medium text-white focus:border-[#52525b] outline-none shadow-inner cursor-pointer"
+                          className="w-full bg-[#09090b] border border-[#222222] rounded-lg px-3 py-2.5 text-sm font-medium text-white focus:border-[#52525b] outline-none shadow-inner cursor-pointer"
                           value={selected.data.appEvent || ""}
                           onChange={(e) => updateSelectedData({ appEvent: e.target.value, config: {} })}
                         >
@@ -692,8 +695,8 @@ export default function WorkflowBuilder() {
                           <h4 className="text-sm font-bold text-white">Setup</h4>
                         </div>
 
-                        {selected.data.actionKey !== "http" && selected.data.actionKey !== "webhook" && selected.data.actionKey !== "schedule" && !vaultKeys.includes(selected.data.actionKey) ? (
-                          <div className="flex flex-col items-center justify-center text-center p-6 border border-dashed border-border-focus rounded-xl bg-canvas mt-2 shadow-sm">
+                        {selected.data.actionKey !== "http" && selected.data.actionKey !== "webhook" && selected.data.actionKey !== "schedule" && selected.data.actionKey !== "email" && !vaultKeys.includes(selected.data.actionKey) ? (
+                          <div className="flex flex-col items-center justify-center text-center p-6 border border-dashed border-border-focus rounded-xl bg-canvas mt-2 shadow-sm w-full">
                             <div className="w-10 h-10 rounded-full bg-status-danger/10 text-status-danger flex items-center justify-center mb-3 shadow-inner"><Lock className="w-5 h-5" /></div>
                             <h4 className="text-sm font-bold text-white mb-2">Connection Required</h4>
                             <p className="text-xs text-text-muted mb-4 leading-relaxed">Please authenticate with {INTEGRATIONS[selected.data.actionKey]?.name} to map these fields.</p>
@@ -709,7 +712,7 @@ export default function WorkflowBuilder() {
                                 <p className="text-[#a1a1aa] text-xs leading-relaxed">Send a POST request to this URL to trigger this workflow.</p>
                                 <div className="bg-[#09090b] border border-[#222222] rounded-lg p-4 flex flex-col gap-4 shadow-inner">
                                   <code className="text-xs text-white break-all font-mono">{import.meta.env.VITE_API_URL}{workflow?.webhook_url}</code>
-                                  <button onClick={() => navigator.clipboard.writeText(`${import.meta.env.VITE_API_URL}${workflow?.webhook_url}`)} className="bg-[#111111] border border-[#222222] text-white px-3 py-2 rounded-md text-xs font-semibold">Copy Webhook URL</button>
+                                  <button onClick={() => navigator.clipboard.writeText(`${import.meta.env.VITE_API_URL}${workflow?.webhook_url}`)} className="w-full bg-[#111111] border border-[#222222] text-white px-3 py-2 rounded-md text-xs font-semibold">Copy Webhook URL</button>
                                 </div>
                               </div>
                             )}
@@ -717,7 +720,7 @@ export default function WorkflowBuilder() {
                             {selected.data.actionKey === "schedule" && (
                               <div className="flex flex-col gap-2">
                                 <label className="text-xs font-semibold text-white">Interval (Minutes)</label>
-                                <input type="number" className="bg-[#111111] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white outline-none" placeholder="15" value={selected.data.config.interval || ""} onChange={(e) => updateSelectedData({ config: { ...selected.data.config, interval: e.target.value } })} />
+                                <input type="number" className="w-full bg-[#111111] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white outline-none" placeholder="15" value={selected.data.config.interval || ""} onChange={(e) => updateSelectedData({ config: { ...selected.data.config, interval: e.target.value } })} />
                               </div>
                             )}
 

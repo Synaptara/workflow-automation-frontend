@@ -24,6 +24,19 @@ export const INTEGRATIONS = {
       }
     }
   },
+  email: {
+      name: "Email (SMTP)",
+      actions: {
+        send_email: {
+          name: "Send an Email",
+          fields: [
+            { key: "to", label: "To Address", type: "text", placeholder: "recipient@example.com" },
+            { key: "subject", label: "Subject", type: "text", placeholder: "Workflow Alert" },
+            { key: "body", label: "Email Body", type: "textarea", placeholder: "Write your message here..." }
+          ]
+        }
+      }
+    },
 
   github: {
     name: "GitHub",

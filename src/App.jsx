@@ -13,6 +13,7 @@ import LandingPage from "./landing/Landingpage.jsx";
 import TemplateGallery from "./pages/TemplateGallery";
 import AuthCallback from "./pages/AuthCallback";
 import IntegrationCallback from "./pages/IntegrationCallback";
+import Billing from "./pages/Billing";
 
 function Shell({ children }) {
   return (
@@ -110,6 +111,16 @@ export default function App() {
               <ProtectedRoute>
                 <Shell>
                   <TemplateGallery />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/billing"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <Billing />
                 </Shell>
               </ProtectedRoute>
             }

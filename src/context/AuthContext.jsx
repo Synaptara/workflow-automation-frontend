@@ -10,30 +10,36 @@ export function AuthProvider({ children }) {
     const { data } = await api.post("/auth/login/", { username, password });
     localStorage.setItem("access", data.access);
     localStorage.setItem("refresh", data.refresh);
+    localStorage.setItem("username", username);
     setIsAuthenticated(true);
   };
 
-  const register = async (username, email, password) => {
-      await api.post("/auth/register/", { username, email, password });
-      await login(username, password);
-    };
+  const sendOtp = async (email) => {
+    await api.post("/auth/send-otp/", { email });
+  };
 
-    // NEW: Handle OAuth login payload from Django
-    const oauthLogin = async (provider, code) => {
-      const { data } = await api.post(`/auth/social/${provider}/`, { code });
-      localStorage.setItem("access", data.access);
-      localStorage.setItem("refresh", data.refresh);
-      setIsAuthenticated(true);
-    };
+  const register = async (username, email, password, otp) => {
+    await api.post("/auth/register/", { username, email, password, otp });
+    await login(username, password);
+  };
 
-    const logout = () => {
+  // Handle OAuth login payload from Django
+  const oauthLogin = async (provider, code) => {
+    const { data } = await api.post(`/auth/social/${provider}/`, { code });
+    localStorage.setItem("access", data.access);
+    localStorage.setItem("refresh", data.refresh);
+    setIsAuthenticated(true);
+  };
+
+  const logout = () => {
     localStorage.removeItem("access");
     localStorage.removeItem("refresh");
+    localStorage.removeItem("username");
     setIsAuthenticated(false);
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, oauthLogin, login, register, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, oauthLogin, login, register, sendOtp, logout }}>
       {children}
     </AuthContext.Provider>
   );
