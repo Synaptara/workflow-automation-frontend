@@ -28,6 +28,14 @@ export function AuthProvider({ children }) {
     const { data } = await api.post(`/auth/social/${provider}/`, { code });
     localStorage.setItem("access", data.access);
     localStorage.setItem("refresh", data.refresh);
+
+    // Fallback logic: Try to get it from the API, otherwise use the provider name
+    if (data.username) {
+        localStorage.setItem("username", data.username);
+    } else {
+        localStorage.setItem("username", `${provider}_user`);
+    }
+
     setIsAuthenticated(true);
   };
 
