@@ -1,8 +1,8 @@
 import axios from "axios";
 
-// In production, VITE_API_URL will be your duckdns.org URL.
-// In local dev, we leave it blank ("") so it routes through the Vite proxy!
-const API_BASE = "";
+// Dynamically pull the URL. In production (Vercel), it uses your duckdns URL.
+// In local dev (where the env var might be missing), it defaults to "" for the proxy.
+const API_BASE = import.meta.env.VITE_API_URL || "";
 
 const api = axios.create({
   baseURL: `${API_BASE}/api`,
@@ -23,7 +23,8 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;
       try {
-        // Send an empty POST request. The browser automatically attaches the refresh_token cookie!
+        // Send a POST request using the dynamic API_BASE.
+        // The browser automatically attaches the refresh_token cookie!
         const { data } = await axios.post(`${API_BASE}/api/auth/refresh/`, {}, {
           withCredentials: true
         });
