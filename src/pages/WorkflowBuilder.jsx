@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import ReactFlow, { Background, addEdge, useNodesState, useEdgesState, Panel, ConnectionMode } from "reactflow";
 import "reactflow/dist/style.css";
 
 import { nodeTypes, ConfirmModal } from "../flow/nodes";
-import { getWorkflow, saveSteps, getCredentials } from "../api/workflows";
+// Ensure getGlobalHistory is imported to allow fallback polling
+import { getWorkflow, saveSteps, getCredentials, getGlobalHistory } from "../api/workflows";
 import { useRunSocket } from "../hooks/useRunSocket";
 import { INTEGRATIONS } from "../config/integrations";
 
@@ -21,8 +22,7 @@ import {
   RobotIcon
 } from "../components/icons";
 
-// ADDED Mail ICON
-import { Play, ExternalLink, HelpCircle, ZoomIn, Maximize, ZoomOut, Lock, Settings2, Mail } from "lucide-react";
+import { Play, ExternalLink, HelpCircle, ZoomIn, Maximize, ZoomOut, Lock, Settings2, Mail, Menu, X } from "lucide-react";
 
 let idCounter = 0;
 const nextId = () => `n${Date.now()}_${idCounter++}`;
@@ -81,7 +81,6 @@ function stepsToGraph(steps) {
 function graphToSteps(nodes, edges) {
   const steps = nodes.map((n) => {
     let safeConfig = n.data.config;
-
     if (typeof safeConfig === "string") {
       try {
         safeConfig = JSON.parse(safeConfig);
@@ -89,7 +88,6 @@ function graphToSteps(nodes, edges) {
         safeConfig = {};
       }
     }
-
     if (safeConfig && typeof safeConfig === "object" && safeConfig["0"] !== undefined && safeConfig.field === undefined) {
       safeConfig = {};
     }
@@ -116,7 +114,6 @@ function graphToSteps(nodes, edges) {
   return steps;
 }
 
-// ADDED EMAIL ICON SUPPORT
 const getIntegrationIcon = (key) => {
   switch (key) {
     case 'discord': return <DiscordIcon className="w-5 h-5" />;
@@ -144,12 +141,39 @@ export default function WorkflowBuilder() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [testPayload, setTestPayload] = useState('{\n  "budget": 6000\n}');
+
+  // Mobile responsive state
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Run execution tracking
   const [testRunId, setTestRunId] = useState(null);
   const [testError, setTestError] = useState("");
   const [edgeToDelete, setEdgeToDelete] = useState(null);
-
   const [vaultKeys, setVaultKeys] = useState([]);
-  const { stepStatus, runStatus } = useRunSocket(testRunId);
+
+  const { stepStatus, runStatus: socketRunStatus } = useRunSocket(testRunId);
+  const [localRunStatus, setLocalRunStatus] = useState("");
+
+  const displayRunStatus = localRunStatus || socketRunStatus;
+
+  // RACE CONDITION FIX: Polling fallback if socket misses the blazingly fast backend
+  useEffect(() => {
+    let interval;
+    if (testRunId && (!displayRunStatus || displayRunStatus.toLowerCase() === "running" || displayRunStatus.toLowerCase() === "pending")) {
+      interval = setInterval(async () => {
+        try {
+          const history = await getGlobalHistory();
+          const currentRun = history.find(r => r.id === testRunId);
+          if (currentRun && (currentRun.status.toLowerCase() === "success" || currentRun.status.toLowerCase() === "failed")) {
+            setLocalRunStatus(currentRun.status.toLowerCase());
+          }
+        } catch (e) {
+          console.error("Polling fallback failed", e);
+        }
+      }, 1500);
+    }
+    return () => clearInterval(interval);
+  }, [testRunId, displayRunStatus]);
 
   const getAvailableVariables = () => {
     try {
@@ -196,13 +220,11 @@ export default function WorkflowBuilder() {
         setEdges(e);
       }
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, setNodes, setEdges]);
 
   useEffect(() => {
     setNodes((ns) => ns.map((n) => ({ ...n, data: { ...n.data, liveStatus: stepStatus[n.id] } })));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stepStatus]);
+  }, [stepStatus, setNodes]);
 
   useEffect(() => {
     if (selected && !nodes.some(n => n.id === selected.id)) setSelected(null);
@@ -221,6 +243,7 @@ export default function WorkflowBuilder() {
   const onDragStart = (event, nodeType) => {
     event.dataTransfer.setData('application/reactflow', nodeType);
     event.dataTransfer.effectAllowed = 'move';
+    if(window.innerWidth < 768) setIsSidebarOpen(false);
   };
 
   const onDragOver = useCallback((event) => {
@@ -249,7 +272,7 @@ export default function WorkflowBuilder() {
       };
       setNodes((nds) => nds.concat(newNode));
     },
-    [rfInstance, nodes]
+    [rfInstance, nodes, setNodes]
   );
 
   const updateSelectedData = (patch) => {
@@ -271,6 +294,7 @@ export default function WorkflowBuilder() {
 
   const handleTestRun = async () => {
     setTestError("");
+    setLocalRunStatus(""); // Reset local override
     let payload;
     try {
       payload = JSON.parse(testPayload);
@@ -326,7 +350,7 @@ export default function WorkflowBuilder() {
           <input
             type={isAuthKey ? "password" : "text"}
             autoComplete="new-password"
-            className={`bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm outline-none transition-colors shadow-inner ${isSecuredInVault && !selected.data.config[field.key] ? 'placeholder-[#34d399]/40 text-[#34d399] focus:border-[#34d399]' : 'text-text-primary focus:border-accent'}`}
+            className={`bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm outline-none transition-colors shadow-inner w-full ${isSecuredInVault && !selected.data.config[field.key] ? 'placeholder-[#34d399]/40 text-[#34d399] focus:border-[#34d399]' : 'text-text-primary focus:border-accent'}`}
             placeholder={isSecuredInVault ? "Leave blank to use Vault connection" : field.placeholder}
             value={selected.data.config[field.key] || ""}
             onChange={(e) => updateSelectedData({ config: { ...selected.data.config, [field.key]: e.target.value } })}
@@ -372,9 +396,17 @@ export default function WorkflowBuilder() {
     <>
       <div className="flex flex-1 w-full relative overflow-hidden h-full">
 
-        {/* LEFT TOOLBAR */}
-        <div className="w-[280px] border-r border-border-default bg-surface flex flex-col z-10 shadow-[5px_0_20px_rgba(0,0,0,0.1)]">
-          <div className="p-5 flex flex-col gap-6 flex-1 overflow-y-auto">
+        {/* MOBILE MENU OVERLAY TOGGLE (z-30 ensures it sits below the global sidebar's z-50) */}
+        <button
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          className="md:hidden absolute top-4 left-4 z-30 bg-surface-elevated border border-border-default p-2 rounded-md text-white shadow-lg"
+        >
+          {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+        </button>
+
+        {/* LEFT TOOLBAR (Responsive Absolute/Relative) (z-20 ensures it stays behind the toggle button) */}
+        <div className={`absolute md:relative z-20 h-full border-r border-border-default bg-surface flex flex-col w-[280px] shrink-0 shadow-[5px_0_20px_rgba(0,0,0,0.3)] transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+          <div className="p-5 flex flex-col gap-6 flex-1 overflow-y-auto mt-10 md:mt-0">
             <div className="flex flex-col gap-3">
               <span className="text-[10px] font-bold text-text-muted uppercase tracking-widest flex items-center justify-between">
                 Add Module
@@ -460,11 +492,11 @@ export default function WorkflowBuilder() {
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-text-secondary">Execution Status</span>
                       <span className={`text-[10px] px-2 py-0.5 rounded uppercase font-bold tracking-wider border ${
-                        runStatus === "success" ? "bg-status-success/10 text-status-success border-status-success/20" :
-                        runStatus === "failed" ? "bg-status-danger/10 text-status-danger border-status-danger/20" :
+                        displayRunStatus?.toLowerCase() === "success" ? "bg-status-success/10 text-status-success border-status-success/20" :
+                        displayRunStatus?.toLowerCase() === "failed" ? "bg-status-danger/10 text-status-danger border-status-danger/20" :
                         "bg-accent/10 text-accent border-accent/20 animate-pulse"
                       }`}>
-                        {runStatus ? runStatus : "RUNNING"}
+                        {displayRunStatus ? displayRunStatus : "RUNNING"}
                       </span>
                     </div>
                     <Link to={`/history`} className="text-accent text-[11px] font-semibold hover:underline mt-1 flex items-center gap-1.5">
@@ -478,7 +510,7 @@ export default function WorkflowBuilder() {
         </div>
 
         {/* WORKFLOW CANVAS */}
-        <div className="flex-1 bg-canvas relative">
+        <div className="flex-1 bg-canvas relative" onClick={() => { if(isSidebarOpen) setIsSidebarOpen(false) }}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -506,7 +538,7 @@ export default function WorkflowBuilder() {
           >
             <Background color="var(--color-border-subtle)" gap={24} size={2} />
 
-            <Panel position="bottom-left" className="m-5">
+            <Panel position="bottom-left" className="m-5 hidden md:block">
               <div className="group relative">
                 <button className="w-9 h-9 rounded-lg bg-surface border border-border-default flex items-center justify-center text-text-muted hover:text-text-primary hover:border-border-focus transition-all shadow-lg hover:bg-surface-hover">
                   <HelpCircle className="w-4 h-4" />
@@ -542,10 +574,9 @@ export default function WorkflowBuilder() {
           </ReactFlow>
         </div>
 
-        {/* RIGHT CONFIGURATION SIDEBAR */}
+        {/* RIGHT CONFIGURATION SIDEBAR (Responsive Absolute/Relative overlay) (z-30 to stay below global sidebar) */}
         {selected && (
-          // CSS FIX: Added `max-w-full` so it doesn't break boundaries, and reduced horizontal padding slightly.
-          <div className="w-[340px] max-w-[85vw] border-l border-border-default bg-surface px-5 py-6 z-10 shadow-[-10px_0_20px_rgba(0,0,0,0.3)] flex flex-col overflow-y-auto custom-scrollbar">
+          <div className="absolute right-0 top-0 h-full md:relative md:h-auto z-30 w-full max-w-[340px] border-l border-border-default bg-surface px-5 py-6 shadow-[-10px_0_20px_rgba(0,0,0,0.3)] flex flex-col overflow-y-auto custom-scrollbar animate-in slide-in-from-right-full duration-300">
             <div className="flex items-center justify-between mb-5 pb-3 border-b border-border-subtle shrink-0">
               <p className="text-text-muted text-[10px] font-bold uppercase tracking-widest">
                 Configure Module
@@ -658,10 +689,10 @@ export default function WorkflowBuilder() {
                 ) : (
 
                   /* STEP 2 & 3: APP SELECTED -> CHOOSE EVENT & CONFIGURE */
-                  <div className="flex flex-col gap-5 animate-in fade-in zoom-in-95 duration-200 pb-6">
+                  <div className="flex flex-col gap-5 animate-in fade-in zoom-in-95 duration-200 pb-6 w-full">
 
                     <div className="flex items-center justify-between bg-canvas border border-border-default rounded-lg p-2 shadow-inner w-full">
-                      <div className="flex items-center gap-2 px-2 overflow-hidden">
+                      <div className="flex items-center gap-2 px-2 overflow-hidden w-full">
                         <WorkflowIcon className="w-4 h-4 text-accent shrink-0" />
                         <span className="text-xs font-bold text-white truncate">{INTEGRATIONS[selected.data.actionKey]?.name || selected.data.actionKey.toUpperCase()}</span>
                       </div>
@@ -672,7 +703,7 @@ export default function WorkflowBuilder() {
 
                     {/* Step 2: Select Event Dropdown (Skip for built-ins) */}
                     {INTEGRATIONS[selected.data.actionKey] && (
-                      <div className="flex flex-col gap-2">
+                      <div className="flex flex-col gap-2 w-full">
                         <label className="text-xs font-semibold text-text-primary">{selected.data.stepType === "trigger" ? "Trigger Event" : "Action Event"}</label>
                         <select
                           className="w-full bg-[#09090b] border border-[#222222] rounded-lg px-3 py-2.5 text-sm font-medium text-white focus:border-[#52525b] outline-none shadow-inner cursor-pointer"
@@ -689,7 +720,7 @@ export default function WorkflowBuilder() {
 
                     {/* Step 3: Vault Connection Check & Configuration Mapping */}
                     {selected.data.appEvent && (
-                      <div className="animate-in slide-in-from-bottom-2 mt-2 pt-5 border-t border-border-subtle">
+                      <div className="animate-in slide-in-from-bottom-2 mt-2 pt-5 border-t border-border-subtle w-full">
                         <div className="flex items-center gap-2 mb-4">
                           <Settings2 className="w-4 h-4 text-text-muted" />
                           <h4 className="text-sm font-bold text-white">Setup</h4>
@@ -705,7 +736,7 @@ export default function WorkflowBuilder() {
                             </Link>
                           </div>
                         ) : (
-                          <div className="flex flex-col gap-6">
+                          <div className="flex flex-col gap-6 w-full">
                             {/* Special case renders for built-in triggers */}
                             {selected.data.actionKey === "webhook" && (
                               <div className="flex flex-col gap-4">

@@ -38,21 +38,26 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Mobile Hamburger Toggle (Floats over the TopNav area) */}
-      <button
-        onClick={() => setMobileOpen(!mobileOpen)}
-        className="md:hidden fixed top-3 left-4 z-[60] w-10 h-10 flex items-center justify-center bg-[#111111] border border-[#222222] rounded-xl text-white shadow-md transition-transform active:scale-95"
-      >
-        {mobileOpen ? (
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        ) : (
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-        )}
-      </button>
+      {/* Mobile Hamburger Toggle (Visible ONLY when sidebar is closed) */}
+      {!mobileOpen && (
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="md:hidden fixed top-3 left-4 z-[40] w-10 h-10 flex items-center justify-center bg-[#111111] border border-[#222222] rounded-xl text-white shadow-md transition-transform active:scale-95"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
+      )}
 
       {/* Mobile Overlay Backdrop */}
       {mobileOpen && (
-        <div className="md:hidden fixed inset-0 bg-black/60 z-[40] backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
+        <div
+          className="md:hidden fixed inset-0 bg-black/60 z-[40] backdrop-blur-sm"
+          onClick={() => setMobileOpen(false)}
+        />
       )}
 
       <aside className={`fixed md:relative inset-y-0 left-0 z-[50] ${collapsed ? "w-20" : "w-64"} h-screen bg-[#08090d] border-r border-[#1f1f1f] flex flex-col shrink-0 transition-transform md:transition-[width] duration-300 ease-in-out shadow-2xl md:shadow-[4px_0_24px_rgba(0,0,0,0.2)] ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
@@ -70,7 +75,7 @@ export default function Sidebar() {
         {/* Workspace Header */}
         <div className={`h-16 flex items-center border-b border-[#1f1f1f] ${collapsed ? "justify-center px-0" : "px-5"}`}>
           <div className="flex items-center gap-3 w-full cursor-pointer hover:opacity-80 transition-opacity overflow-hidden whitespace-nowrap">
-            {/* Image Logo */}
+            {/* Image Logo (Completely unobstructed) */}
             <div className={`w-9 h-9 rounded-[10px] overflow-hidden bg-[#111111] border border-[#222222] flex items-center justify-center shrink-0 shadow-sm ${collapsed ? "mx-auto" : ""}`}>
               <img src={Logo} alt="Orkflo Logo" className="w-full h-full object-cover" />
             </div>
@@ -81,6 +86,16 @@ export default function Sidebar() {
               </div>
             )}
           </div>
+
+          {/* Close button placed on top-right of mobile drawer */}
+          <button
+            onClick={() => setMobileOpen(false)}
+            className="md:hidden ml-auto p-1.5 rounded-lg text-[#71717a] hover:text-white hover:bg-[#141414] transition-colors"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
         </div>
 
         <div className="flex flex-col flex-1 overflow-y-auto py-5 px-3 gap-6 overflow-x-hidden custom-scrollbar">
