@@ -1,9 +1,13 @@
 import axios from "axios";
 
-// Pull the base URL from Vite's environment, fallback to localhost for local dev
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+// In production, VITE_API_URL will be your duckdns.org URL.
+// In local dev, we leave it blank ("") so it routes through the Vite proxy!
+const API_BASE = "";
 
-const api = axios.create({ baseURL: `${API_BASE}/api` });
+const api = axios.create({
+  baseURL: `${API_BASE}/api`,
+  withCredentials: true // CRITICAL: This tells the browser to attach the HttpOnly cookie
+});
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("access");
@@ -15,20 +19,23 @@ api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const original = error.config;
+    // If the access token expires (401) and we haven't retried yet...
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;
-      const refresh = localStorage.getItem("refresh");
-      if (refresh) {
-        try {
-          const { data } = await axios.post(`${API_BASE}/api/auth/refresh/`, { refresh });
-          localStorage.setItem("access", data.access);
-          original.headers.Authorization = `Bearer ${data.access}`;
-          return api(original);
-        } catch {
-          localStorage.removeItem("access");
-          localStorage.removeItem("refresh");
-          window.location.href = "/login";
-        }
+      try {
+        // Send an empty POST request. The browser automatically attaches the refresh_token cookie!
+        const { data } = await axios.post(`${API_BASE}/api/auth/refresh/`, {}, {
+          withCredentials: true
+        });
+
+        localStorage.setItem("access", data.access);
+        original.headers.Authorization = `Bearer ${data.access}`;
+        return api(original);
+      } catch {
+        // If the refresh token is expired or invalid, log them out
+        localStorage.removeItem("access");
+        localStorage.removeItem("username");
+        window.location.href = "/login";
       }
     }
     return Promise.reject(error);

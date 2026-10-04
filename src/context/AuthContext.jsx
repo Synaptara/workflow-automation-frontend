@@ -9,7 +9,7 @@ export function AuthProvider({ children }) {
   const login = async (username, password) => {
     const { data } = await api.post("/auth/login/", { username, password });
     localStorage.setItem("access", data.access);
-    localStorage.setItem("refresh", data.refresh);
+    // REMOVED: localStorage.setItem("refresh", data.refresh);
     localStorage.setItem("username", username);
     setIsAuthenticated(true);
   };
@@ -23,13 +23,11 @@ export function AuthProvider({ children }) {
     await login(username, password);
   };
 
-  // Handle OAuth login payload from Django
   const oauthLogin = async (provider, code) => {
     const { data } = await api.post(`/auth/social/${provider}/`, { code });
     localStorage.setItem("access", data.access);
-    localStorage.setItem("refresh", data.refresh);
+    // REMOVED: localStorage.setItem("refresh", data.refresh);
 
-    // Fallback logic: Try to get it from the API, otherwise use the provider name
     if (data.username) {
         localStorage.setItem("username", data.username);
     } else {
@@ -41,7 +39,7 @@ export function AuthProvider({ children }) {
 
   const logout = () => {
     localStorage.removeItem("access");
-    localStorage.removeItem("refresh");
+    // REMOVED: localStorage.removeItem("refresh");
     localStorage.removeItem("username");
     setIsAuthenticated(false);
   };
