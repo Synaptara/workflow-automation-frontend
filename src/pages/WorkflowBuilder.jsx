@@ -3,9 +3,9 @@ import { useParams, Link } from "react-router-dom";
 import ReactFlow, { Background, addEdge, useNodesState, useEdgesState, Panel, ConnectionMode } from "reactflow";
 import "reactflow/dist/style.css";
 
+import RichInput from "../components/RichInput";
 import { nodeTypes, ConfirmModal } from "../flow/nodes";
-// Ensure getGlobalHistory is imported to allow fallback polling
-import { getWorkflow, saveSteps, getCredentials, getGlobalHistory } from "../api/workflows";
+import { getWorkflow, saveSteps, getCredentials, getGlobalHistory, fetchTriggerSchema } from "../api/workflows";
 import { useRunSocket } from "../hooks/useRunSocket";
 import { INTEGRATIONS } from "../config/integrations";
 
@@ -22,7 +22,7 @@ import {
   RobotIcon
 } from "../components/icons";
 
-import { Play, ExternalLink, HelpCircle, ZoomIn, Maximize, ZoomOut, Lock, Settings2, Mail, Menu, X } from "lucide-react";
+import { Play, ExternalLink, HelpCircle, ZoomIn, Maximize, ZoomOut, Lock, Settings2, Mail, Menu, X, RefreshCw } from "lucide-react";
 
 let idCounter = 0;
 const nextId = () => `n${Date.now()}_${idCounter++}`;
@@ -82,11 +82,7 @@ function graphToSteps(nodes, edges) {
   const steps = nodes.map((n) => {
     let safeConfig = n.data.config;
     if (typeof safeConfig === "string") {
-      try {
-        safeConfig = JSON.parse(safeConfig);
-      } catch {
-        safeConfig = {};
-      }
+      try { safeConfig = JSON.parse(safeConfig); } catch { safeConfig = {}; }
     }
     if (safeConfig && typeof safeConfig === "object" && safeConfig["0"] !== undefined && safeConfig.field === undefined) {
       safeConfig = {};
@@ -122,11 +118,7 @@ const getIntegrationIcon = (key) => {
     case 'slack': return <SlackIcon className="w-5 h-5" />;
     case 'groq_ai': return <RobotIcon className="w-5 h-5 text-orange-500" />;
     case 'email': return <Mail className="w-5 h-5 text-blue-400" />;
-    case 'notion': return (
-      <div className="w-5 h-5 bg-zinc-100 text-black font-serif font-bold flex items-center justify-center rounded-[4px] text-xs">
-        N
-      </div>
-    );
+    case 'notion': return <div className="w-5 h-5 bg-zinc-100 text-black font-serif font-bold flex items-center justify-center rounded-[4px] text-xs">N</div>;
     default: return <WorkflowIcon className="w-5 h-5" />;
   }
 };
@@ -140,12 +132,12 @@ export default function WorkflowBuilder() {
   const [workflow, setWorkflow] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
-  const [testPayload, setTestPayload] = useState('{\n  "budget": 6000\n}');
 
-  // Mobile responsive state
+  // Enterprise Fetch State
+  const [triggerSchema, setTriggerSchema] = useState(null);
+  const [isFetchingSchema, setIsFetchingSchema] = useState(false);
+
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
-  // Run execution tracking
   const [testRunId, setTestRunId] = useState(null);
   const [testError, setTestError] = useState("");
   const [edgeToDelete, setEdgeToDelete] = useState(null);
@@ -153,10 +145,8 @@ export default function WorkflowBuilder() {
 
   const { stepStatus, runStatus: socketRunStatus } = useRunSocket(testRunId);
   const [localRunStatus, setLocalRunStatus] = useState("");
-
   const displayRunStatus = localRunStatus || socketRunStatus;
 
-  // RACE CONDITION FIX: Polling fallback if socket misses the blazingly fast backend
   useEffect(() => {
     let interval;
     if (testRunId && (!displayRunStatus || displayRunStatus.toLowerCase() === "running" || displayRunStatus.toLowerCase() === "pending")) {
@@ -167,24 +157,16 @@ export default function WorkflowBuilder() {
           if (currentRun && (currentRun.status.toLowerCase() === "success" || currentRun.status.toLowerCase() === "failed")) {
             setLocalRunStatus(currentRun.status.toLowerCase());
           }
-        } catch (e) {
-          console.error("Polling fallback failed", e);
-        }
+        } catch (e) { console.error("Polling fallback failed", e); }
       }, 1500);
     }
     return () => clearInterval(interval);
   }, [testRunId, displayRunStatus]);
 
+  // Derive variables from the trigger schema instead of raw JSON
   const getAvailableVariables = () => {
-    try {
-      const parsed = JSON.parse(testPayload);
-      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-        return Object.keys(parsed);
-      }
-    } catch (e) {
-      return [];
-    }
-    return [];
+    if (!triggerSchema) return [];
+    return Object.keys(triggerSchema);
   };
 
   const getUpstreamNodes = useCallback((targetId, currentEdges, currentNodes, visited = new Set()) => {
@@ -201,7 +183,6 @@ export default function WorkflowBuilder() {
         result.push(...getUpstreamNodes(edge.source, currentEdges, currentNodes, visited));
       }
     });
-
     return Array.from(new Map(result.map(item => [item.id, item])).values());
   }, []);
 
@@ -218,6 +199,13 @@ export default function WorkflowBuilder() {
       } else {
         setNodes(n);
         setEdges(e);
+
+        // Auto-load trigger schema if available in config (mocking standard integrations output)
+        const rootTrigger = n.find(node => node.type === 'trigger');
+        if (rootTrigger && rootTrigger.data.actionKey) {
+            const schemaDef = INTEGRATIONS[rootTrigger.data.actionKey]?.triggers?.[rootTrigger.data.appEvent]?.schema_mock;
+            if(schemaDef) setTriggerSchema(schemaDef);
+        }
       }
     });
   }, [id, setNodes, setEdges]);
@@ -257,11 +245,27 @@ export default function WorkflowBuilder() {
       const type = event.dataTransfer.getData('application/reactflow');
       if (!type || !rfInstance) return;
 
-      const position = rfInstance.screenToFlowPosition({
-        x: event.clientX,
-        y: event.clientY,
-      });
+      const position = rfInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      addNodeToCanvas(type, position);
+    },
+    [rfInstance, nodes, setNodes]
+  );
 
+  // ENTERPRISE FIX: Mobile Tap-to-Add support
+  const handleTapToAdd = (type) => {
+      if (!rfInstance) return;
+      // Drop it exactly in the center of the current viewport
+      const center = rfInstance.screenToFlowPosition({
+          x: window.innerWidth / 2,
+          y: window.innerHeight / 2
+      });
+      // Offset slightly if nodes already exist to prevent stacking
+      const offset = nodes.length * 20;
+      addNodeToCanvas(type, { x: center.x + offset, y: center.y + offset });
+      if(window.innerWidth < 768) setIsSidebarOpen(false);
+  };
+
+  const addNodeToCanvas = (type, position) => {
       const newNode = {
         id: nextId(),
         type,
@@ -271,9 +275,7 @@ export default function WorkflowBuilder() {
             : { stepType: type, actionKey: "", appEvent: "", config: {}, order: nodes.length },
       };
       setNodes((nds) => nds.concat(newNode));
-    },
-    [rfInstance, nodes, setNodes]
-  );
+  };
 
   const updateSelectedData = (patch) => {
     setNodes((ns) => ns.map((n) => (n.id === selected.id ? { ...n, data: { ...n.data, ...patch } } : n)));
@@ -292,111 +294,140 @@ export default function WorkflowBuilder() {
     }
   };
 
+  // Enterprise Test & Fetch handler
+  const handleFetchSchema = async () => {
+      setIsFetchingSchema(true);
+      setTestError("");
+
+      const triggerNode = nodes.find(n => n.type === 'trigger');
+      if (!triggerNode || !triggerNode.data.actionKey) {
+          setTestError("Please configure a trigger module first.");
+          setIsFetchingSchema(false);
+          return;
+      }
+
+      try {
+          // In production, this hits your backend endpoint which runs a live API test against the integration
+          const schema = await fetchTriggerSchema(triggerNode.data.actionKey, triggerNode.data.appEvent, triggerNode.data.config);
+          setTriggerSchema(schema);
+      } catch (err) {
+          // Fallback to static mock schema if the backend route isn't built yet
+          const fallback = INTEGRATIONS[triggerNode.data.actionKey]?.triggers?.[triggerNode.data.appEvent]?.schema_mock;
+          if (fallback) {
+              setTriggerSchema(fallback);
+          } else {
+              setTestError("Failed to fetch recent event data. Is your app connected?");
+          }
+      } finally {
+          setIsFetchingSchema(false);
+      }
+  };
+
   const handleTestRun = async () => {
     setTestError("");
-    setLocalRunStatus(""); // Reset local override
-    let payload;
-    try {
-      payload = JSON.parse(testPayload);
-    } catch {
-      setTestError("Payload must be valid JSON");
-      return;
+    setLocalRunStatus("");
+    if(!triggerSchema) {
+        setTestError("Please fetch test data first.");
+        return;
     }
+
     await handleSave();
     try {
       const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
       const res = await fetch(`${API_BASE}${workflow.webhook_url}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(triggerSchema),
       });
       const data = await res.json();
       setTestRunId(data.run_id);
     } catch {
-      setTestError("Could not reach the webhook endpoint");
+      setTestError("Could not execute manual test run.");
     }
   };
 
   const renderField = (field, isAuthKey, isSecuredInVault) => {
-    return (
-      <div key={field.key} className="flex flex-col gap-2">
-        <div className="flex justify-between items-center">
-          <label className="text-xs font-semibold text-text-primary">{field.label}</label>
-          {isSecuredInVault && (
-            <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-[#34d399] bg-[#141d17] border border-[#1b3a27] px-1.5 py-0.5 rounded shadow-sm">
-              <Lock className="w-2.5 h-2.5" /> Vault Secured
-            </span>
-          )}
-        </div>
+      return (
+        <div key={field.key} className="flex flex-col gap-2">
+          <div className="flex justify-between items-center">
+            <label className="text-xs font-semibold text-text-primary">{field.label}</label>
+            {isSecuredInVault && (
+              <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-[#34d399] bg-[#141d17] border border-[#1b3a27] px-1.5 py-0.5 rounded shadow-sm">
+                <Lock className="w-2.5 h-2.5" /> Vault Secured
+              </span>
+            )}
+          </div>
 
-        {field.type === "textarea" ? (
-          <textarea
-            className="bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent outline-none transition-colors h-24 resize-none shadow-inner"
-            placeholder={field.placeholder}
-            value={selected.data.config[field.key] || ""}
-            onChange={(e) => updateSelectedData({ config: { ...selected.data.config, [field.key]: e.target.value } })}
-          />
-        ) : field.type === "select" ? (
-          <select
-            className="bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent outline-none transition-colors shadow-inner appearance-none cursor-pointer"
-            value={selected.data.config[field.key] || (field.options[0]?.value || "")}
-            onChange={(e) => updateSelectedData({ config: { ...selected.data.config, [field.key]: e.target.value } })}
-          >
-            {field.options.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-        ) : (
-          <input
-            type={isAuthKey ? "password" : "text"}
-            autoComplete="new-password"
-            className={`bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm outline-none transition-colors shadow-inner w-full ${isSecuredInVault && !selected.data.config[field.key] ? 'placeholder-[#34d399]/40 text-[#34d399] focus:border-[#34d399]' : 'text-text-primary focus:border-accent'}`}
-            placeholder={isSecuredInVault ? "Leave blank to use Vault connection" : field.placeholder}
-            value={selected.data.config[field.key] || ""}
-            onChange={(e) => updateSelectedData({ config: { ...selected.data.config, [field.key]: e.target.value } })}
-          />
-        )}
-
-        {!isAuthKey && (
-          <div className="flex flex-col gap-2 mt-1 p-3 bg-canvas rounded-lg border border-border-subtle shadow-inner">
-            <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">Insert Variables</span>
-            <div className="flex flex-wrap gap-2">
-              {getAvailableVariables().map((key) => (
-                <button key={`trigger-${key}`} type="button"
-                  onClick={() => {
-                    const currentVal = selected.data.config[field.key] || "";
-                    updateSelectedData({ config: { ...selected.data.config, [field.key]: currentVal + `{{trigger.${key}}}` } });
-                  }}
-                  className="text-[11px] font-mono bg-surface border border-border-default px-2 py-1.5 rounded hover:border-accent text-text-secondary transition-all shadow-sm hover:scale-105"
-                >+ trigger.{key}</button>
+          {/* ENTERPRISE PILL RENDERING */}
+          {field.type === "select" ? (
+            <select
+              className="bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-primary focus:border-accent outline-none transition-colors shadow-inner appearance-none cursor-pointer"
+              value={selected.data.config[field.key] || (field.options[0]?.value || "")}
+              onChange={(e) => updateSelectedData({ config: { ...selected.data.config, [field.key]: e.target.value } })}
+            >
+              {field.options.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
-              {upstreamActions.map((node) => {
-                const defaultPath = node.data.actionKey === "groq_ai" ? ".reply" : "";
-                return (
-                  <button key={`upstream-${node.id}`} type="button"
+            </select>
+          ) : isAuthKey ? (
+            // Passwords must remain standard inputs for security
+            <input
+              type="password"
+              autoComplete="new-password"
+              className={`bg-canvas border border-border-default rounded-lg px-3 py-2.5 text-sm outline-none transition-colors shadow-inner w-full ${isSecuredInVault && !selected.data.config[field.key] ? 'placeholder-[#34d399]/40 text-[#34d399] focus:border-[#34d399]' : 'text-text-primary focus:border-accent'}`}
+              placeholder={isSecuredInVault ? "Leave blank to use Vault connection" : field.placeholder}
+              value={selected.data.config[field.key] || ""}
+              onChange={(e) => updateSelectedData({ config: { ...selected.data.config, [field.key]: e.target.value } })}
+            />
+          ) : (
+            // Standard text and textareas get the visual Data Pills
+            <RichInput
+               value={selected.data.config[field.key] || ""}
+               onChange={(newVal) => updateSelectedData({ config: { ...selected.data.config, [field.key]: newVal } })}
+               placeholder={field.placeholder}
+               isTextArea={field.type === "textarea"}
+            />
+          )}
+
+          {!isAuthKey && (
+            <div className="flex flex-col gap-2 mt-1 p-3 bg-canvas rounded-lg border border-border-subtle shadow-inner">
+              <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">Insert Variables</span>
+              <div className="flex flex-wrap gap-2">
+                {getAvailableVariables().map((key) => (
+                  <button key={`trigger-${key}`} type="button"
                     onClick={() => {
                       const currentVal = selected.data.config[field.key] || "";
-                      updateSelectedData({ config: { ...selected.data.config, [field.key]: currentVal + `{{${node.id}${defaultPath}}}` } });
+                      updateSelectedData({ config: { ...selected.data.config, [field.key]: currentVal + `{{trigger.${key}}}` } });
                     }}
-                    className="text-[11px] font-mono bg-surface border border-border-default px-2 py-1.5 rounded hover:border-accent text-accent transition-all shadow-sm hover:scale-105"
-                  >+ {INTEGRATIONS[node.data.actionKey]?.name || node.data.actionKey}</button>
-                );
-              })}
-              {getAvailableVariables().length === 0 && upstreamActions.length === 0 && (
-                <span className="text-[11px] text-text-muted italic">No upstream variables available</span>
-              )}
+                    className="text-[11px] font-mono bg-surface border border-border-default px-2 py-1.5 rounded hover:border-accent text-text-secondary transition-all shadow-sm hover:scale-105"
+                  >+ trigger.{key}</button>
+                ))}
+                {upstreamActions.map((node) => {
+                  const defaultPath = node.data.actionKey === "groq_ai" ? ".reply" : "";
+                  return (
+                    <button key={`upstream-${node.id}`} type="button"
+                      onClick={() => {
+                        const currentVal = selected.data.config[field.key] || "";
+                        updateSelectedData({ config: { ...selected.data.config, [field.key]: currentVal + `{{${node.id}${defaultPath}}}` } });
+                      }}
+                      className="text-[11px] font-mono bg-surface border border-border-default px-2 py-1.5 rounded hover:border-accent text-accent transition-all shadow-sm hover:scale-105"
+                    >+ {INTEGRATIONS[node.data.actionKey]?.name || node.data.actionKey}</button>
+                  );
+                })}
+                {getAvailableVariables().length === 0 && upstreamActions.length === 0 && (
+                  <span className="text-[11px] text-text-muted italic">Click 'Test Trigger' to fetch available variables</span>
+                )}
+              </div>
             </div>
-          </div>
-        )}
-      </div>
-    );
-  };
+          )}
+        </div>
+      );
+    };
 
   return (
     <>
       <div className="flex flex-1 w-full relative overflow-hidden h-full">
 
-        {/* MOBILE MENU OVERLAY TOGGLE (z-30 ensures it sits below the global sidebar's z-50) */}
         <button
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
           className="md:hidden absolute top-4 left-4 z-30 bg-surface-elevated border border-border-default p-2 rounded-md text-white shadow-lg"
@@ -404,19 +435,19 @@ export default function WorkflowBuilder() {
           {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
 
-        {/* LEFT TOOLBAR (Responsive Absolute/Relative) (z-20 ensures it stays behind the toggle button) */}
         <div className={`absolute md:relative z-20 h-full border-r border-border-default bg-surface flex flex-col w-[280px] shrink-0 shadow-[5px_0_20px_rgba(0,0,0,0.3)] transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
           <div className="p-5 flex flex-col gap-6 flex-1 overflow-y-auto mt-10 md:mt-0">
             <div className="flex flex-col gap-3">
               <span className="text-[10px] font-bold text-text-muted uppercase tracking-widest flex items-center justify-between">
                 Add Module
-                <span className="bg-canvas border border-border-default px-1.5 py-0.5 rounded text-[8px] tracking-normal">Drag & Drop</span>
+                <span className="bg-canvas border border-border-default px-1.5 py-0.5 rounded text-[8px] tracking-normal">Tap or Drag</span>
               </span>
 
               <div
                 draggable
                 onDragStart={(e) => onDragStart(e, 'condition')}
-                className="group flex items-center gap-3 w-full p-2.5 rounded-lg border border-border-default bg-canvas hover:border-accent hover:bg-surface-elevated transition-all text-left shadow-sm cursor-grab active:cursor-grabbing"
+                onClick={() => handleTapToAdd('condition')}
+                className="group flex items-center gap-3 w-full p-2.5 rounded-lg border border-border-default bg-canvas hover:border-accent hover:bg-surface-elevated transition-all text-left shadow-sm cursor-grab active:cursor-grabbing md:cursor-grab md:active:cursor-grabbing cursor-pointer"
               >
                 <div className="w-9 h-9 rounded-md bg-surface border border-border-default flex items-center justify-center text-text-secondary group-hover:text-accent group-hover:border-accent/30 transition-colors shadow-inner">
                   <BlocksIcon className="w-[18px] h-[18px] stroke-[2]" />
@@ -430,7 +461,8 @@ export default function WorkflowBuilder() {
               <div
                 draggable
                 onDragStart={(e) => onDragStart(e, 'action')}
-                className="group flex items-center gap-3 w-full p-2.5 rounded-lg border border-border-default bg-canvas hover:border-accent hover:bg-surface-elevated transition-all text-left shadow-sm cursor-grab active:cursor-grabbing"
+                onClick={() => handleTapToAdd('action')}
+                className="group flex items-center gap-3 w-full p-2.5 rounded-lg border border-border-default bg-canvas hover:border-accent hover:bg-surface-elevated transition-all text-left shadow-sm cursor-grab active:cursor-grabbing md:cursor-grab md:active:cursor-grabbing cursor-pointer"
               >
                 <div className="w-9 h-9 rounded-md bg-surface border border-border-default flex items-center justify-center text-text-secondary group-hover:text-accent group-hover:border-accent/30 transition-colors shadow-inner">
                   <WorkflowIcon className="w-[18px] h-[18px] stroke-[2]" />
@@ -463,26 +495,37 @@ export default function WorkflowBuilder() {
               <div className="mt-2 flex flex-col gap-3">
                 <span className="text-[10px] font-bold text-text-muted uppercase tracking-widest flex items-center gap-1.5">
                   <BotMessageSquareIcon className="w-3.5 h-3.5" />
-                  Test Trigger Payload
+                  Test Workflow
                 </span>
 
-                <div className="bg-canvas border border-border-default rounded-lg overflow-hidden flex flex-col shadow-inner">
-                  <div className="bg-surface-elevated border-b border-border-default px-3 py-1.5 flex items-center">
-                    <span className="text-[10px] font-mono text-text-muted">payload.json</span>
-                  </div>
-                  <textarea
-                    className="w-full bg-transparent p-3 text-xs text-text-secondary font-mono h-32 outline-none focus:text-text-primary transition-colors resize-none"
-                    value={testPayload}
-                    onChange={(e) => setTestPayload(e.target.value)}
-                  />
+                <div className="bg-canvas border border-border-default rounded-lg overflow-hidden flex flex-col shadow-inner p-3 gap-3">
+                  <p className="text-xs text-text-secondary">
+                    Fetch a recent event from your trigger app to load variables and run a test.
+                  </p>
+
+                  {triggerSchema && (
+                      <div className="bg-surface border border-border-default rounded p-2 text-[10px] font-mono text-status-success overflow-x-auto max-h-32">
+                          Data fetched successfully! {Object.keys(triggerSchema).length} variables available.
+                      </div>
+                  )}
+
+                  <button
+                    onClick={handleFetchSchema}
+                    disabled={isFetchingSchema}
+                    className="w-full text-xs font-bold py-2 rounded bg-surface border border-border-default hover:border-accent text-text-primary transition-all flex items-center justify-center gap-2"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isFetchingSchema ? 'animate-spin' : ''}`} />
+                    {isFetchingSchema ? "Fetching..." : "Fetch Recent Event"}
+                  </button>
                 </div>
 
                 <button
                   onClick={handleTestRun}
-                  className="w-full text-sm font-bold py-2.5 rounded-lg bg-surface-elevated border border-border-default hover:border-text-primary hover:bg-surface-hover text-text-primary transition-all flex items-center justify-center gap-2 shadow-sm"
+                  disabled={!triggerSchema}
+                  className="w-full text-sm font-bold py-2.5 rounded-lg bg-surface-elevated border border-border-default hover:border-text-primary hover:bg-surface-hover disabled:opacity-50 text-text-primary transition-all flex items-center justify-center gap-2 shadow-sm"
                 >
                   <Play className="w-3.5 h-3.5 fill-current" />
-                  Fire Payload
+                  Run Test
                 </button>
 
                 {testError && <p className="text-status-danger text-xs mt-1">{testError}</p>}
@@ -509,7 +552,6 @@ export default function WorkflowBuilder() {
           </div>
         </div>
 
-        {/* WORKFLOW CANVAS */}
         <div className="flex-1 bg-canvas relative" onClick={() => { if(isSidebarOpen) setIsSidebarOpen(false) }}>
           <ReactFlow
             nodes={nodes}
@@ -574,7 +616,6 @@ export default function WorkflowBuilder() {
           </ReactFlow>
         </div>
 
-        {/* RIGHT CONFIGURATION SIDEBAR (Responsive Absolute/Relative overlay) (z-30 to stay below global sidebar) */}
         {selected && (
           <div className="absolute right-0 top-0 h-full md:relative md:h-auto z-30 w-full max-w-[340px] border-l border-border-default bg-surface px-5 py-6 shadow-[-10px_0_20px_rgba(0,0,0,0.3)] flex flex-col overflow-y-auto custom-scrollbar animate-in slide-in-from-right-full duration-300">
             <div className="flex items-center justify-between mb-5 pb-3 border-b border-border-subtle shrink-0">
@@ -584,7 +625,6 @@ export default function WorkflowBuilder() {
               <button onClick={() => setSelected(null)} className="text-text-muted hover:text-white text-xl leading-none">&times;</button>
             </div>
 
-            {/* ROUTER / CONDITION NODE CONFIGURATION */}
             {selected.data.stepType === "condition" && (
               <div className="flex flex-col gap-5 animate-in fade-in slide-in-from-right-4 duration-300">
                 <div className="flex flex-col gap-2">
@@ -622,11 +662,8 @@ export default function WorkflowBuilder() {
               </div>
             )}
 
-            {/* TRIGGER OR ACTION CONFIGURATION (The Hierarchical Stepper) */}
             {(selected.data.stepType === "trigger" || selected.data.stepType === "action") && (
               <div className="flex flex-col animate-in fade-in slide-in-from-right-4 duration-300 h-full">
-
-                {/* STEP 1: SELECT APP */}
                 {!selected.data.actionKey ? (
                   <div className="flex flex-col gap-6 pb-6">
                     <div>
@@ -687,10 +724,7 @@ export default function WorkflowBuilder() {
                     </div>
                   </div>
                 ) : (
-
-                  /* STEP 2 & 3: APP SELECTED -> CHOOSE EVENT & CONFIGURE */
                   <div className="flex flex-col gap-5 animate-in fade-in zoom-in-95 duration-200 pb-6 w-full">
-
                     <div className="flex items-center justify-between bg-canvas border border-border-default rounded-lg p-2 shadow-inner w-full">
                       <div className="flex items-center gap-2 px-2 overflow-hidden w-full">
                         <WorkflowIcon className="w-4 h-4 text-accent shrink-0" />
@@ -701,7 +735,6 @@ export default function WorkflowBuilder() {
                       </button>
                     </div>
 
-                    {/* Step 2: Select Event Dropdown (Skip for built-ins) */}
                     {INTEGRATIONS[selected.data.actionKey] && (
                       <div className="flex flex-col gap-2 w-full">
                         <label className="text-xs font-semibold text-text-primary">{selected.data.stepType === "trigger" ? "Trigger Event" : "Action Event"}</label>
@@ -718,7 +751,6 @@ export default function WorkflowBuilder() {
                       </div>
                     )}
 
-                    {/* Step 3: Vault Connection Check & Configuration Mapping */}
                     {selected.data.appEvent && (
                       <div className="animate-in slide-in-from-bottom-2 mt-2 pt-5 border-t border-border-subtle w-full">
                         <div className="flex items-center gap-2 mb-4">
@@ -737,7 +769,6 @@ export default function WorkflowBuilder() {
                           </div>
                         ) : (
                           <div className="flex flex-col gap-6 w-full">
-                            {/* Special case renders for built-in triggers */}
                             {selected.data.actionKey === "webhook" && (
                               <div className="flex flex-col gap-4">
                                 <p className="text-[#a1a1aa] text-xs leading-relaxed">Send a POST request to this URL to trigger this workflow.</p>
@@ -755,7 +786,6 @@ export default function WorkflowBuilder() {
                               </div>
                             )}
 
-                            {/* Standard dynamic field rendering from config */}
                             {INTEGRATIONS[selected.data.actionKey]?.[selected.data.stepType === "trigger" ? "triggers" : "actions"]?.[selected.data.appEvent]?.fields?.map((field) => {
                               const isAuthKey = field.key === "webhook_url" || field.key === "api_key";
                               const isSecuredInVault = isAuthKey && vaultKeys.includes(selected.data.actionKey);

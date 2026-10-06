@@ -4,12 +4,26 @@ export const INTEGRATIONS = {
       triggers: {
         new_message: {
           name: "New Message",
+          schema_mock: {
+              event_type: "new_message",
+              channel_id: "1475149366984708150",
+              author_id: "1160188996488544306",
+              author_name: "johndoe",
+              content: "Hello world!",
+              guild_id: "1475149366984708150"
+          },
           fields: [
             { key: "channel_id", label: "Channel ID", placeholder: "e.g. 10842039485093", type: "text" }
           ]
         },
         member_join: {
           name: "User Joins Server",
+          schema_mock: {
+              event_type: "member_join",
+              author_id: "1160188996488544306",
+              author_name: "new_member_123",
+              guild_id: "1475149366984708150"
+          },
           fields: [
             { key: "guild_id", label: "Server (Guild) ID", placeholder: "Leave blank to track all servers", type: "text" }
           ]
@@ -54,13 +68,18 @@ export const INTEGRATIONS = {
         }
       }
     },
-
   github: {
     name: "GitHub",
     triggers: {
       new_issue: {
         name: "New Issue Created",
         description: "Triggers when a new issue is opened in a repository.",
+        schema_mock: {
+            issue_title: "Fix bug in app",
+            issue_body: "The app crashes on startup.",
+            author: "dev_user",
+            repo_name: "owner/repo"
+        },
         fields: [
           { key: "repo_name", label: "Repository Name", type: "text", placeholder: "owner/repo" }
         ]
@@ -89,7 +108,6 @@ export const INTEGRATIONS = {
       }
     }
   },
-
   youtube: {
     name: "YouTube",
     triggers: {},
@@ -110,13 +128,18 @@ export const INTEGRATIONS = {
       }
     }
   },
-
   google_sheets: {
     name: "Google Sheets",
     triggers: {
       new_row: {
         name: "New Spreadsheet Row",
         description: "Triggers when a new row is added to the bottom of a sheet.",
+        schema_mock: {
+            row_index: 42,
+            col_a: "John Doe",
+            col_b: "john@example.com",
+            col_c: "$1500"
+        },
         fields: [
           { key: "spreadsheet_id", label: "Spreadsheet ID", type: "text", placeholder: "1BxiMVs0XRYFgPN..." },
           { key: "sheet_name", label: "Worksheet Name", type: "text", placeholder: "Sheet1" }
@@ -135,7 +158,6 @@ export const INTEGRATIONS = {
       }
     }
   },
-
   groq_ai: {
     name: "Groq AI",
     triggers: {},
@@ -159,7 +181,6 @@ export const INTEGRATIONS = {
       }
     }
   },
-
   slack: {
     name: "Slack",
     triggers: {},
@@ -174,7 +195,6 @@ export const INTEGRATIONS = {
       }
     }
   },
-
   notion: {
     name: "Notion",
     triggers: {},
@@ -191,7 +211,6 @@ export const INTEGRATIONS = {
       }
     }
   },
-
   http: {
     name: "HTTP Request",
     triggers: {},
