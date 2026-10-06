@@ -24,12 +24,13 @@ export const INTEGRATIONS = {
           ]
         },
         create_channel: {
-          name: "Create Text Channel",
-          fields: [
-            { key: "guild_id", label: "Server (Guild) ID", type: "text" },
-            { key: "channel_name", label: "New Channel Name", placeholder: "e.g. welcome-{{trigger.author_name}}", type: "text" }
-          ]
-        },
+            name: "Create Text Channel",
+            fields: [
+              { key: "guild_id", label: "Server (Guild) ID", type: "text" },
+              { key: "channel_name", label: "New Channel Name", placeholder: "e.g. welcome-{{trigger.author_name}}", type: "text" },
+              { key: "private_user_id", label: "Make Private For (User ID)", placeholder: "Leave blank for public", type: "text" }
+            ]
+          },
         add_role: {
           name: "Assign Role to User",
           fields: [
