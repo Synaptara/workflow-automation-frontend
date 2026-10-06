@@ -1,29 +1,45 @@
 export const INTEGRATIONS = {
   discord: {
-    name: "Discord",
-    triggers: {
-      new_message: {
-        name: "New Message Posted to Channel",
-        description: "Triggers when a new message is sent in a specific channel.",
-        fields: [
-          { key: "channel_id", label: "Channel ID", type: "text", placeholder: "1234567890" }
-        ]
+      name: "Discord",
+      triggers: {
+        new_message: {
+          name: "New Message",
+          fields: [
+            { key: "channel_id", label: "Channel ID", placeholder: "e.g. 10842039485093", type: "text" }
+          ]
+        },
+        member_join: {
+          name: "User Joins Server",
+          fields: [
+            { key: "guild_id", label: "Server (Guild) ID", placeholder: "Leave blank to track all servers", type: "text" }
+          ]
+        }
+      },
+      actions: {
+        send_message: {
+          name: "Send Message",
+          fields: [
+            { key: "channel_id", label: "Channel ID", type: "text" },
+            { key: "content", label: "Message Content", type: "textarea" }
+          ]
+        },
+        create_channel: {
+          name: "Create Text Channel",
+          fields: [
+            { key: "guild_id", label: "Server (Guild) ID", type: "text" },
+            { key: "channel_name", label: "New Channel Name", placeholder: "e.g. welcome-{{trigger.author_name}}", type: "text" }
+          ]
+        },
+        add_role: {
+          name: "Assign Role to User",
+          fields: [
+            { key: "guild_id", label: "Server (Guild) ID", type: "text" },
+            { key: "user_id", label: "Target User ID", type: "text" },
+            { key: "role_id", label: "Role ID to Assign", type: "text" }
+          ]
+        }
       }
     },
-    actions: {
-      send_message: {
-        name: "Send Channel Message",
-        description: "Post a new message to a specific Discord channel.",
-        fields: [
-          { key: "channel_id", label: "Channel ID", type: "text", placeholder: "1234567890" },
-          { key: "content", label: "Message Text / @Pings", type: "textarea", placeholder: "Deployment failed! <@123456789>" },
-          { key: "embed_title", label: "Embed Title", type: "text", placeholder: "Workflow Alert" },
-          { key: "embed_description", label: "Embed Description", type: "textarea", placeholder: "Detailed alert info..." },
-          { key: "embed_color", label: "Embed Color (Hex)", type: "text", placeholder: "ff0000" },
-        ]
-      }
-    }
-  },
   email: {
       name: "Email (SMTP)",
       actions: {
