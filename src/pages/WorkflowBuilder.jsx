@@ -562,7 +562,7 @@ export default function WorkflowBuilder() {
 
   return (
     <>
-      <div className="flex flex-1 w-full relative overflow-hidden h-full">
+      <div className="flex flex-1 w-full relative overflow-hidden h-full min-h-0">
 
         {/* Mobile backdrop */}
         {isSidebarOpen && (

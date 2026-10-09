@@ -237,13 +237,14 @@ export default function Sidebar() {
         />
       )}
 
+      {/* Changed h-screen to h-[100dvh] pb-safe area constraints */}
       <aside
-        className={`fixed md:relative inset-y-0 left-0 z-[50] ${isCollapsed ? "w-[60px]" : "w-64"} h-screen bg-background border-r border-border flex flex-col shrink-0 transition-[width,transform] duration-300 ease-in-out ${
+        className={`fixed md:relative top-0 bottom-0 left-0 z-[50] ${isCollapsed ? "w-[60px]" : "w-64"} h-[100dvh] bg-background border-r border-border flex flex-col shrink-0 transition-[width,transform] duration-300 ease-in-out ${
           mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         }`}
       >
         {/* Workspace */}
-        <div className={`h-14 flex items-center ${isCollapsed ? "justify-center px-0" : "px-3"} mt-2`}>
+        <div className={`h-14 flex items-center shrink-0 ${isCollapsed ? "justify-center px-0" : "px-3"} mt-2`}>
           <Link
             to="/webhooks"
             className="flex items-center gap-2.5 w-full hover:bg-accent/50 p-1.5 rounded-md transition-colors overflow-hidden whitespace-nowrap"
@@ -264,7 +265,7 @@ export default function Sidebar() {
         </div>
 
         {/* Find */}
-        <div className={isCollapsed ? "px-0 py-2 flex justify-center" : "px-3 py-2"}>
+        <div className={`shrink-0 ${isCollapsed ? "px-0 py-2 flex justify-center" : "px-3 py-2"}`}>
           {isCollapsed ? (
             <button
               onClick={() => setPaletteOpen(true)}
@@ -310,31 +311,33 @@ export default function Sidebar() {
           })}
         </nav>
 
-        {/* Usage */}
-        <Link
-          to="/billing"
-          title={isCollapsed ? `Task usage: ${usage.count}/${usage.limit}` : undefined}
-          className="block border-t border-border px-4 py-3 min-h-[72px] hover:bg-accent/30 transition-colors overflow-hidden whitespace-nowrap"
-        >
-          {isCollapsed ? (
-            <div className="flex justify-center">
-              <UsageRing pct={pct} tone={tone} />
-            </div>
-          ) : (
-            <div className="flex flex-col gap-1.5">
-              <div className="flex justify-between items-center">
-                <span className="text-[12px] font-medium text-muted-foreground">Task usage</span>
-                <span className="text-[11px] font-mono text-muted-foreground tabular-nums">
-                  {Number(usage.count || 0).toLocaleString()}/{Number(usage.limit || 0).toLocaleString()}
-                </span>
+        {/* Usage - Pinned firmly to the bottom with safe area padding */}
+        <div className="shrink-0 w-full mt-auto pb-[env(safe-area-inset-bottom)] bg-background">
+          <Link
+            to="/billing"
+            title={isCollapsed ? `Task usage: ${usage.count}/${usage.limit}` : undefined}
+            className="block border-t border-border px-4 py-3 min-h-[72px] hover:bg-accent/30 transition-colors overflow-hidden whitespace-nowrap"
+          >
+            {isCollapsed ? (
+              <div className="flex justify-center">
+                <UsageRing pct={pct} tone={tone} />
               </div>
-              <div className="w-full bg-accent rounded-full h-1 overflow-hidden">
-                <div className={`${tone.bar} h-full rounded-full transition-all duration-700 ease-out`} style={{ width: `${pct}%` }} />
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                <div className="flex justify-between items-center">
+                  <span className="text-[12px] font-medium text-muted-foreground">Task usage</span>
+                  <span className="text-[11px] font-mono text-muted-foreground tabular-nums">
+                    {Number(usage.count || 0).toLocaleString()}/{Number(usage.limit || 0).toLocaleString()}
+                  </span>
+                </div>
+                <div className="w-full bg-accent rounded-full h-1 overflow-hidden">
+                  <div className={`${tone.bar} h-full rounded-full transition-all duration-700 ease-out`} style={{ width: `${pct}%` }} />
+                </div>
+                <span className={`text-[11px] ${tone.text}`}>{usageNote}</span>
               </div>
-              <span className={`text-[11px] ${tone.text}`}>{usageNote}</span>
-            </div>
-          )}
-        </Link>
+            )}
+          </Link>
+        </div>
       </aside>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
