@@ -1,83 +1,353 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { listWorkflows, createWorkflow, updateWorkflow, deleteWorkflow } from "../api/workflows";
+import { listWorkflows, createWorkflow, updateWorkflow, deleteWorkflow, getGlobalHistory } from "../api/workflows";
+import { INTEGRATIONS } from "../config/integrations";
+import { Button } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import { Input } from "../components/ui/input";
+import { Badge } from "../components/ui/badge";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "../components/ui/dropdown-menu";
+import {
+  DiscordIcon, GithubIcon, FileSheetIcon, SlackIcon, RobotIcon, GmailIcon, NotionIcon,
+  NetworkIcon, RotateCcwClockIcon, WorkflowIcon,
+} from "../components/icons";
+import { Search, Plus, Trash2, Pencil, MoreHorizontal, Copy, Check, Link2, Pause, Play, GitBranch, Workflow as WorkflowEmptyIcon } from "lucide-react";
+
+/* ---------- helpers ---------- */
+
+const relTime = (value) => {
+  if (!value) return "";
+  const diff = Math.floor((Date.now() - new Date(value).getTime()) / 1000);
+  if (diff < 60) return "just now";
+  const m = Math.floor(diff / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+};
+
+const ICON_CLS = "w-3.5 h-3.5";
+const INTEGRATION_ICONS = {
+  webhook: <NetworkIcon className={`${ICON_CLS} text-foreground`} />,
+  schedule: <RotateCcwClockIcon className={`${ICON_CLS} text-foreground`} />,
+  http: <NetworkIcon className={`${ICON_CLS} text-blue-500`} />,
+  discord: <DiscordIcon className={ICON_CLS} />,
+  github: <GithubIcon className={`${ICON_CLS} text-foreground`} />,
+  google_sheets: <FileSheetIcon className={ICON_CLS} />,
+  slack: <SlackIcon className={ICON_CLS} />,
+  groq_ai: <RobotIcon className={`${ICON_CLS} text-orange-500`} />,
+  email: <GmailIcon className={ICON_CLS} />,
+  gmail: <GmailIcon className={ICON_CLS} />,
+  notion: <NotionIcon className={ICON_CLS} />,
+};
+const iconFor = (key) => INTEGRATION_ICONS[key] || <WorkflowIcon className={`${ICON_CLS} text-muted-foreground`} />;
+
+const RUN_STATE = {
+  success: { label: "Succeeded", dot: "bg-emerald-500" },
+  failed: { label: "Failed", dot: "bg-red-500" },
+  running: { label: "Running", dot: "bg-amber-400 animate-pulse" },
+  pending: { label: "Queued", dot: "bg-amber-400 animate-pulse" },
+};
+
+function triggerOf(wf) {
+  return wf.steps?.find((s) => s.step_type === "trigger");
+}
+
+function triggerLabel(t) {
+  if (!t || !t.action_key) return "No trigger set";
+  if (t.action_key === "schedule") return `Every ${t.config?.interval || 15} min`;
+  if (t.action_key === "webhook") return "Incoming webhook";
+  const integ = INTEGRATIONS[t.action_key];
+  const ev = integ?.triggers?.[t.app_event]?.name;
+  return ev ? `${integ.name}: ${ev}` : integ?.name || t.action_key;
+}
+
+function appKeys(wf) {
+  const seen = new Set();
+  (wf.steps || []).forEach((s) => {
+    if (s.step_type === "action" && s.action_key) seen.add(s.action_key);
+  });
+  return [...seen];
+}
+
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+/* ---------- small components ---------- */
+
+function Stat({ label, value, hint }) {
+  return (
+    <div className="flex flex-col gap-1 px-4 py-3">
+      <span className="text-[12px] text-muted-foreground">{label}</span>
+      <div className="flex items-baseline gap-2">
+        <span className="text-xl font-semibold tracking-tight text-foreground tabular-nums">{value}</span>
+        {hint && <span className="text-[11px] text-muted-foreground">{hint}</span>}
+      </div>
+    </div>
+  );
+}
+
+function IdChip({ id }) {
+  const [copied, setCopied] = useState(false);
+  const short = String(id).slice(0, 8);
+  return (
+    <button
+      type="button"
+      title="Copy workflow ID"
+      onClick={(e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(String(id));
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1200);
+      }}
+      className="group/id inline-flex items-center gap-1.5 text-[12px] font-mono text-muted-foreground hover:text-foreground transition-colors"
+    >
+      {short}
+      {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3 opacity-0 group-hover/id:opacity-100 transition-opacity" />}
+    </button>
+  );
+}
+
+function AppStack({ keys }) {
+  if (keys.length === 0) return <span className="text-[12px] text-muted-foreground">No actions yet</span>;
+  const shown = keys.slice(0, 4);
+  const extra = keys.length - shown.length;
+  return (
+    <div className="flex items-center -space-x-1.5">
+      {shown.map((k) => (
+        <span
+          key={k}
+          title={INTEGRATIONS[k]?.name || k}
+          className="w-6 h-6 rounded-md bg-background border border-border ring-2 ring-card flex items-center justify-center"
+        >
+          {iconFor(k)}
+        </span>
+      ))}
+      {extra > 0 && (
+        <span className="w-6 h-6 rounded-md bg-accent border border-border ring-2 ring-card flex items-center justify-center text-[10px] font-mono text-muted-foreground">
+          +{extra}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function WorkflowCard({ wf, lastRun, onOpen, onRename, onDelete, onToggle }) {
+  const trig = triggerOf(wf);
+  const active = wf.is_active !== false;
+  const run = lastRun ? RUN_STATE[String(lastRun.status).toLowerCase()] : null;
+  const steps = wf.steps?.length || 0;
+
+  return (
+    <div
+      onClick={onOpen}
+      className="group flex flex-col rounded-lg border border-border bg-card hover:border-foreground/30 transition-colors cursor-pointer overflow-hidden"
+    >
+      <div className="flex items-start justify-between gap-3 p-4 pb-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 shrink-0 rounded-md border border-border bg-background flex items-center justify-center">
+            {iconFor(trig?.action_key || "webhook")}
+          </div>
+          <div className="flex flex-col min-w-0">
+            <span className="text-[14px] font-medium text-foreground tracking-tight truncate">{wf.name}</span>
+            <IdChip id={wf.id} />
+          </div>
+        </div>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="w-7 h-7 -mr-1.5 -mt-1 shrink-0 text-muted-foreground hover:text-foreground"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()} className="w-48 text-[13px]">
+            <DropdownMenuItem onClick={onRename} className="cursor-pointer">
+              <Pencil className="w-4 h-4 mr-2" /> Rename
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onToggle} className="cursor-pointer">
+              {active ? <Pause className="w-4 h-4 mr-2" /> : <Play className="w-4 h-4 mr-2" />}
+              {active ? "Pause workflow" : "Resume workflow"}
+            </DropdownMenuItem>
+            {wf.webhook_url && (
+              <DropdownMenuItem onClick={() => navigator.clipboard.writeText(`${API_BASE}${wf.webhook_url}`)} className="cursor-pointer">
+                <Link2 className="w-4 h-4 mr-2" /> Copy webhook URL
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={onDelete}
+              className="cursor-pointer"
+            >
+              <Trash2 className="w-4 h-4 mr-2" /> Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <div className="px-4 pb-4 flex flex-col gap-3 flex-1">
+        <p className="text-[12px] text-muted-foreground truncate">{triggerLabel(trig)}</p>
+        <div className="flex items-center justify-between">
+          <AppStack keys={appKeys(wf)} />
+          {!active && (
+            <span className="text-[10px] font-mono text-muted-foreground border border-border rounded px-1.5 py-0.5">Paused</span>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-t border-border text-[12px] text-muted-foreground">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${run ? run.dot : "bg-muted-foreground/40"}`} />
+          <span className="truncate">
+            {run ? (
+              <>
+                <span className="text-foreground">{run.label}</span> {relTime(lastRun.started_at)}
+              </>
+            ) : (
+              "Never run"
+            )}
+          </span>
+        </div>
+        <span className="flex items-center gap-1.5 shrink-0" title={wf.created_at ? `Created ${relTime(wf.created_at)}` : undefined}>
+          <GitBranch className="w-3.5 h-3.5" />
+          {steps} {steps === 1 ? "step" : "steps"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function SkeletonCard() {
+  return (
+    <div className="rounded-lg border border-border bg-card h-[168px] p-4 animate-pulse flex flex-col gap-4">
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-md bg-accent" />
+        <div className="flex flex-col gap-2">
+          <div className="h-3 w-28 rounded bg-accent" />
+          <div className="h-2.5 w-16 rounded bg-accent" />
+        </div>
+      </div>
+      <div className="h-2.5 w-40 rounded bg-accent" />
+      <div className="h-6 w-24 rounded bg-accent mt-auto" />
+    </div>
+  );
+}
+
+/* ---------- page ---------- */
 
 export default function WorkflowList() {
   const [workflows, setWorkflows] = useState([]);
+  const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeMenu, setActiveMenu] = useState(null);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("all");
+  const navigate = useNavigate();
+  const searchRef = useRef(null);
 
-  // Custom Modal State Management
   const [modalState, setModalState] = useState({ type: null, id: null, name: "" });
   const [inputValue, setInputValue] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState("");
 
-  const navigate = useNavigate();
-
   useEffect(() => {
-    listWorkflows().then((data) => {
-      setWorkflows(data);
-      setLoading(false);
-    });
+    Promise.all([listWorkflows(), getGlobalHistory().catch(() => [])])
+      .then(([wfs, runs]) => {
+        setWorkflows(wfs);
+        setHistory(Array.isArray(runs) ? runs : []);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
-  // Modal Triggers
-  const openCreateModal = () => {
-    setModalError("");
-    setInputValue("");
-    setModalState({ type: "create", id: null, name: "" });
+  useEffect(() => {
+    const onKey = (e) => {
+      const tag = e.target.tagName;
+      if (e.key === "/" && tag !== "INPUT" && tag !== "TEXTAREA") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const lastRunByWorkflow = useMemo(() => {
+    const map = {};
+    history.forEach((r) => {
+      const cur = map[r.workflow];
+      if (!cur || new Date(r.started_at) > new Date(cur.started_at)) map[r.workflow] = r;
+    });
+    return map;
+  }, [history]);
+
+  const stats = useMemo(() => {
+    const active = workflows.filter((w) => w.is_active !== false).length;
+    const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    const runs24 = history.filter((r) => new Date(r.started_at).getTime() > dayAgo).length;
+    const done = history.filter((r) => ["success", "failed"].includes(String(r.status).toLowerCase()));
+    const ok = done.filter((r) => String(r.status).toLowerCase() === "success").length;
+    return {
+      total: workflows.length,
+      active,
+      paused: workflows.length - active,
+      runs24,
+      rate: done.length ? `${Math.round((ok / done.length) * 100)}%` : "—",
+    };
+  }, [workflows, history]);
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return workflows.filter((w) => {
+      const isActive = w.is_active !== false;
+      if (filter === "active" && !isActive) return false;
+      if (filter === "paused" && isActive) return false;
+      if (!q) return true;
+      return w.name.toLowerCase().includes(q) || String(w.id).toLowerCase().startsWith(q);
+    });
+  }, [workflows, query, filter]);
+
+  const openCreateModal = () => { setModalError(""); setInputValue(""); setModalState({ type: "create", id: null, name: "" }); };
+  const openRenameModal = (id, name) => { setModalError(""); setInputValue(name); setModalState({ type: "rename", id, name }); };
+  const openDeleteModal = (id, name) => { setModalError(""); setModalState({ type: "delete", id, name }); };
+  const closeModal = () => { setModalState({ type: null, id: null, name: "" }); setInputValue(""); setModalError(""); };
+
+  const toggleActive = async (wf) => {
+    const next = !(wf.is_active !== false);
+    try {
+      await updateWorkflow(wf.id, { is_active: next });
+      setWorkflows((prev) => prev.map((w) => (w.id === wf.id ? { ...w, is_active: next } : w)));
+    } catch (e) {
+      console.error("Failed to update workflow", e);
+    }
   };
 
-  const openRenameModal = (e, id, currentName) => {
-    e.stopPropagation();
-    setActiveMenu(null);
-    setModalError("");
-    setInputValue(currentName);
-    setModalState({ type: "rename", id, name: currentName });
-  };
-
-  const openDeleteModal = (e, id, currentName) => {
-    e.stopPropagation();
-    setActiveMenu(null);
-    setModalError("");
-    setModalState({ type: "delete", id, name: currentName });
-  };
-
-  const closeModal = () => {
-    setModalState({ type: null, id: null, name: "" });
-    setInputValue("");
-    setModalError("");
-  };
-
-  // Unified Submission Handler for all 3 Custom Modals
   const handleModalSubmit = async (e) => {
     e.preventDefault();
     setModalError("");
     setIsSubmitting(true);
-
     try {
       if (modalState.type === "create") {
         const wf = await createWorkflow(inputValue.trim());
         navigate(`/workflows/${wf.id}`);
-      }
-      else if (modalState.type === "rename") {
+      } else if (modalState.type === "rename") {
         if (inputValue.trim() !== "" && inputValue !== modalState.name) {
           await updateWorkflow(modalState.id, { name: inputValue.trim() });
-          setWorkflows((prev) =>
-            prev.map((w) => (w.id === modalState.id ? { ...w, name: inputValue.trim() } : w))
-          );
+          setWorkflows((prev) => prev.map((w) => (w.id === modalState.id ? { ...w, name: inputValue.trim() } : w)));
         }
         closeModal();
-      }
-      else if (modalState.type === "delete") {
+      } else if (modalState.type === "delete") {
         await deleteWorkflow(modalState.id);
         setWorkflows((prev) => prev.filter((w) => w.id !== modalState.id));
         closeModal();
       }
     } catch (err) {
       if (modalState.type === "create" && err.response?.status === 403) {
-        setModalError("Free plan limit reached (max 2 workflows). Upgrade your plan to create more pipelines.");
+        setModalError("Free plan limit reached. Upgrade to create more pipelines.");
       } else {
         setModalError("An error occurred. Please try again.");
       }
@@ -86,294 +356,156 @@ export default function WorkflowList() {
     }
   };
 
-  if (loading) return (
-    <div className="flex h-full items-center justify-center bg-[#060607]">
-      <div className="animate-pulse flex flex-col items-center gap-4">
-        <div className="w-8 h-8 border-4 border-white/20 border-t-white rounded-full animate-spin"></div>
-        <p className="text-zinc-400 text-sm font-medium">Loading workflows...</p>
-      </div>
-    </div>
-  );
+  const FILTERS = [
+    { key: "all", label: "All", n: stats.total },
+    { key: "active", label: "Active", n: stats.active },
+    { key: "paused", label: "Paused", n: stats.paused },
+  ];
 
   return (
-    <main className="flex-1 h-full overflow-y-auto px-4 sm:px-6 py-6 lg:px-10 lg:py-9 space-y-6 sm:space-y-8 bg-[#060607] custom-scrollbar relative">
+    <main className="flex-1 h-full overflow-y-auto px-4 py-6 sm:px-6 md:px-8 bg-background custom-scrollbar">
+      <div className="max-w-[1200px] mx-auto flex flex-col gap-6 pb-20">
 
-      {/* Page Title & Primary Actions Row */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 max-w-[1400px] mx-auto">
-        <div>
-          <h1 className="font-serif text-2xl md:text-3xl font-normal tracking-tight text-zinc-100">Your workflows</h1>
-          <p className="text-sm text-zinc-400 mt-1.5 font-medium">Manage and monitor your automated pipelines.</p>
-        </div>
-
-        <div className="w-full sm:w-auto">
-          <button
-            onClick={openCreateModal}
-            className="w-full sm:w-auto inline-flex justify-center items-center gap-2 px-4 py-2.5 rounded-md bg-zinc-100 hover:bg-white text-zinc-900 text-sm font-bold shadow-[0_0_10px_rgba(255,255,255,0.1)] hover:shadow-[0_0_15px_rgba(255,255,255,0.2)] transition-all transform active:scale-95"
-            type="button"
-          >
-            <svg className="w-4 h-4 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <line x1="12" x2="12" y1="5" y2="19"></line>
-              <line x1="5" x2="19" y1="12" y2="12"></line>
-            </svg>
-            <span>Create Workflow</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Filters & Search Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/80 pb-3 max-w-[1400px] mx-auto">
-        <div className="flex items-center gap-6 overflow-x-auto custom-scrollbar">
-          <div className="relative pb-3 -mb-3.5 border-b-2 border-zinc-100 flex items-center gap-2 whitespace-nowrap">
-            <span className="text-sm font-semibold text-zinc-100">All workflows</span>
-            <span className="text-[11px] px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-300 font-bold">{workflows.length}</span>
-          </div>
-        </div>
-
-        <div className="relative w-full sm:w-80 shrink-0 mt-2 sm:mt-0">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-500">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" viewBox="0 0 24 24">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" x2="16.65" y1="21" y2="16.65"></line>
-            </svg>
-          </div>
-          <input
-            className="w-full bg-[#09090b] border border-zinc-800 hover:border-zinc-700 focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600 rounded-md pl-9 pr-12 py-2 text-xs font-medium text-zinc-200 placeholder-zinc-500 outline-none transition-all shadow-sm"
-            placeholder="Search workflows..."
-            type="text"
-          />
-          <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none">
-            <kbd className="text-[10px] text-zinc-400 border border-zinc-800 rounded px-1.5 py-0.5 bg-zinc-900 font-sans font-bold">⌘K</kbd>
-          </div>
-        </div>
-      </div>
-
-      {/* Workflows Grid */}
-      <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 max-w-[1400px] mx-auto pb-20">
-
-        {workflows.map((wf) => (
-          <div
-            key={wf.id}
-            onClick={() => navigate(`/workflows/${wf.id}`)}
-            className="group relative bg-[#09090b] hover:bg-[#0c0c0e] border border-zinc-800/80 hover:border-zinc-700 rounded-xl p-5 flex flex-col justify-between transition-all duration-200 shadow-sm hover:shadow-lg cursor-pointer"
-          >
-            <div>
-              {/* Card Header: Icon & Status & Menu */}
-              <div className="flex items-center justify-between relative">
-
-                <div className="w-10 h-10 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-300 group-hover:bg-zinc-800/50 group-hover:text-emerald-400 transition shadow-inner">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
-                  </svg>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-sm">
-                    <span className="relative flex h-1.5 w-1.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400"></span>
-                    </span>
-                    Active
-                  </span>
-
-                  {/* 3-Dot Menu */}
-                  <div className="relative">
-                    <button
-                      className="w-7 h-7 rounded-md border border-transparent hover:border-zinc-700 bg-transparent hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100 flex items-center justify-center transition-colors"
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveMenu(activeMenu === wf.id ? null : wf.id);
-                      }}
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
-                        <circle cx="12" cy="5" r="1.5"></circle>
-                        <circle cx="12" cy="12" r="1.5"></circle>
-                        <circle cx="12" cy="19" r="1.5"></circle>
-                      </svg>
-                    </button>
-
-                    {/* Dropdown Menu */}
-                    {activeMenu === wf.id && (
-                      <>
-                        <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setActiveMenu(null); }} />
-                        <div className="absolute right-0 top-full mt-1 w-36 bg-[#0c0c0e] border border-zinc-800 rounded-lg shadow-2xl z-20 py-1 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
-                          <button
-                            onClick={(e) => openRenameModal(e, wf.id, wf.name)}
-                            className="w-full text-left px-3 py-2 text-xs font-medium text-zinc-300 hover:bg-zinc-800/80 hover:text-white transition-colors flex items-center gap-2"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
-                            </svg>
-                            Rename
-                          </button>
-                          <div className="h-px bg-zinc-800/50 my-1" />
-                          <button
-                            onClick={(e) => openDeleteModal(e, wf.id, wf.name)}
-                            className="w-full text-left px-3 py-2 text-xs font-medium text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors flex items-center gap-2"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                            </svg>
-                            Delete
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Workflow Title & Mini Pipeline Preview */}
-              <div className="mt-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-base font-semibold text-zinc-100 group-hover:text-emerald-400 transition-colors tracking-tight truncate pr-4">
-                    {wf.name}
-                  </h3>
-                  <span className="text-[11px] font-mono font-medium text-zinc-500 whitespace-nowrap">Ready</span>
-                </div>
-
-                <div className="flex items-center gap-1.5 py-1 overflow-hidden">
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 font-mono whitespace-nowrap">Trigger</span>
-                  <svg className="w-3 h-3 text-zinc-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 font-mono whitespace-nowrap">Action</span>
-                  {wf.steps?.length > 2 && (
-                    <>
-                      <svg className="w-3 h-3 text-zinc-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono whitespace-nowrap">Output</span>
-                    </>
-                  )}
-                </div>
-              </div>
+        {/* Toolbar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1">
+            <div className="relative w-full sm:max-w-[360px] group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-foreground transition-colors" />
+              <Input
+                ref={searchRef}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by name or ID"
+                className="pl-9 h-9 bg-background border-border text-[13px]"
+              />
+              <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 hidden sm:block text-[10px] font-mono text-muted-foreground bg-accent border border-border rounded px-1.5">/</kbd>
             </div>
 
-            {/* Card Footer */}
-            <div className="mt-6 pt-4 border-t border-zinc-800/50 flex items-center justify-between text-xs text-zinc-400 font-medium">
-              <div className="flex items-center gap-1.5">
-                <svg className="w-3.5 h-3.5 text-zinc-500" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                  <rect height="7" rx="1" width="7" x="3" y="3"></rect>
-                  <rect height="7" rx="1" width="7" x="14" y="3"></rect>
-                  <rect height="7" rx="1" width="7" x="14" y="14"></rect>
-                  <rect height="7" rx="1" width="7" x="3" y="14"></rect>
-                </svg>
-                <span>{wf.steps?.length || 0} Modules</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <svg className="w-12 h-3.5 text-emerald-400/60 group-hover:text-emerald-400 transition-colors" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 48 14">
-                  <path d="M0 10 L8 8 L16 11 L24 4 L32 7 L40 2 L48 5"></path>
-                </svg>
-              </div>
+            <div className="inline-flex items-center rounded-md border border-border p-0.5 bg-background w-fit">
+              {FILTERS.map((f) => (
+                <button
+                  key={f.key}
+                  onClick={() => setFilter(f.key)}
+                  className={`h-7 px-2.5 rounded text-[12px] font-medium transition-colors flex items-center gap-1.5 ${
+                    filter === f.key ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {f.label}
+                  <span className="font-mono text-[10px] text-muted-foreground tabular-nums">{f.n}</span>
+                </button>
+              ))}
             </div>
           </div>
-        ))}
 
-        {/* Create New Pipeline Placeholder Card */}
-        <div
-          onClick={openCreateModal}
-          className="group relative border border-dashed border-zinc-800 hover:border-zinc-600 bg-zinc-900/20 hover:bg-zinc-900/40 rounded-xl p-5 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-200 min-h-[220px]"
-        >
-          <div className="w-10 h-10 rounded-xl bg-zinc-900 group-hover:bg-zinc-800 border border-zinc-800 group-hover:border-zinc-700 flex items-center justify-center text-zinc-400 group-hover:text-zinc-100 transition shadow-sm mb-3">
-            <svg className="w-5 h-5 stroke-[2] transition-transform duration-200 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <line x1="12" x2="12" y1="5" y2="19"></line>
-              <line x1="5" x2="19" y1="12" y2="12"></line>
-            </svg>
-          </div>
-          <p className="text-sm font-semibold text-zinc-300 group-hover:text-white transition-colors">Create new pipeline</p>
-          <p className="text-xs font-medium text-zinc-500 mt-1 max-w-[190px]">Connect models, triggers & actions in visual canvas</p>
-          <span className="mt-3 text-[11px] font-bold text-emerald-500/80 group-hover:text-emerald-400 transition-colors flex items-center gap-1">
-            <span>Start from scratch</span>
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7"></path></svg>
-          </span>
+          <Button onClick={openCreateModal} className="h-9 px-3.5 text-[13px] font-medium gap-1.5 shrink-0">
+            <Plus className="w-4 h-4" /> New workflow
+          </Button>
         </div>
 
-      </section>
+        {/* Overview strip */}
+        <div className="grid grid-cols-2 md:grid-cols-4 rounded-lg border border-border bg-card divide-border divide-x [&>*:nth-child(n+3)]:border-t md:[&>*:nth-child(n+3)]:border-t-0 [&>*:nth-child(3)]:border-l-0 md:[&>*:nth-child(3)]:border-l [&>*]:border-border">
+          <Stat label="Workflows" value={stats.total} />
+          <Stat label="Active" value={stats.active} hint={stats.paused ? `${stats.paused} paused` : undefined} />
+          <Stat label="Runs, last 24h" value={stats.runs24} />
+          <Stat label="Success rate" value={stats.rate} />
+        </div>
 
-      {/* ------------------------------------------------------------- */}
-      {/* CUSTOM MODALS FOR CREATE, RENAME, AND DELETE */}
-      {/* ------------------------------------------------------------- */}
-      {modalState.type && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div
-            className="bg-[#09090b] border border-zinc-800 rounded-xl p-6 w-full max-w-md shadow-2xl flex flex-col gap-5 animate-in zoom-in-95 duration-200"
-            onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside the modal
-          >
-            {/* Modal Header */}
-            <div className="flex justify-between items-start">
-              <h3 className="text-lg font-semibold text-zinc-100 tracking-tight">
-                {modalState.type === "create" && "Create new pipeline"}
-                {modalState.type === "rename" && "Rename pipeline"}
-                {modalState.type === "delete" && "Delete pipeline"}
-              </h3>
-              <button
-                onClick={closeModal}
-                className="text-zinc-500 hover:text-zinc-300 transition-colors rounded-md p-1 hover:bg-zinc-800"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
-              </button>
+        {/* Grid */}
+        <section className="flex flex-col gap-3">
+          <h2 className="text-[13px] font-medium text-foreground">
+            Workflows
+            {!loading && <span className="ml-2 font-mono text-[11px] text-muted-foreground">{visible.length}</span>}
+          </h2>
+
+          {loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
             </div>
-
-            {/* Error Message */}
-            {modalError && (
-              <div className="p-3 rounded-md bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium">
-                {modalError}
+          ) : visible.length === 0 ? (
+            <div className="flex flex-col items-center justify-center text-center gap-3 rounded-lg border border-dashed border-border py-20 px-6">
+              <div className="w-10 h-10 rounded-md border border-border bg-card flex items-center justify-center">
+                <WorkflowEmptyIcon className="w-5 h-5 text-muted-foreground" />
               </div>
-            )}
-
-            {/* Modal Body form */}
-            <form onSubmit={handleModalSubmit} className="flex flex-col gap-5">
-
-              {/* Delete View */}
-              {modalState.type === "delete" ? (
-                <p className="text-sm text-zinc-400 leading-relaxed font-medium">
-                  Are you sure you want to delete <span className="text-zinc-200 font-bold">"{modalState.name}"</span>? All modules, run history, and configurations will be permanently erased. This action cannot be undone.
+              <div className="flex flex-col gap-1">
+                <p className="text-[14px] font-medium text-foreground">
+                  {workflows.length === 0 ? "No workflows yet" : "No workflows match"}
                 </p>
-              ) : (
-                /* Create & Rename View */
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-zinc-300">Workflow Name</label>
-                  <input
-                    type="text"
-                    autoFocus
-                    className="w-full bg-zinc-900/50 border border-zinc-800 focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600 rounded-md px-3 py-2.5 text-sm text-zinc-100 outline-none transition-all placeholder:text-zinc-600 shadow-inner"
-                    placeholder="e.g., Lead sync to Notion"
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                  />
-                </div>
+                <p className="text-[13px] text-muted-foreground max-w-[36ch]">
+                  {workflows.length === 0
+                    ? "Create a workflow to connect a trigger to your apps."
+                    : "Try a different name, ID, or filter."}
+                </p>
+              </div>
+              {workflows.length === 0 && (
+                <Button onClick={openCreateModal} className="h-9 px-3.5 text-[13px] gap-1.5 mt-1">
+                  <Plus className="w-4 h-4" /> New workflow
+                </Button>
               )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {visible.map((wf) => (
+                <WorkflowCard
+                  key={wf.id}
+                  wf={wf}
+                  lastRun={lastRunByWorkflow[wf.id]}
+                  onOpen={() => navigate(`/workflows/${wf.id}`)}
+                  onRename={() => openRenameModal(wf.id, wf.name)}
+                  onDelete={() => openDeleteModal(wf.id, wf.name)}
+                  onToggle={() => toggleActive(wf)}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
 
-              {/* Modal Actions */}
-              <div className="flex items-center justify-end gap-3 mt-2">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="px-4 py-2 rounded-md bg-transparent text-zinc-400 hover:text-zinc-100 text-sm font-semibold transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
+      {/* Modals */}
+      {modalState.type && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150"
+          onClick={closeModal}
+        >
+          <Card
+            className="w-full max-w-md p-5 shadow-2xl border bg-background flex flex-col gap-5 animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex flex-col gap-1.5">
+              <h3 className="text-[15px] font-semibold tracking-tight text-foreground">
+                {modalState.type === "create" ? "New workflow" : modalState.type === "rename" ? "Rename workflow" : "Delete workflow"}
+              </h3>
+              <p className="text-[13px] text-muted-foreground">
+                {modalState.type === "delete"
+                  ? `Delete "${modalState.name}"? This can't be undone.`
+                  : "Give your workflow a name you'll recognise."}
+              </p>
+            </div>
+
+            {modalError && <Badge variant="destructive" className="rounded-md w-fit">{modalError}</Badge>}
+
+            <form onSubmit={handleModalSubmit} className="flex flex-col gap-5">
+              {modalState.type !== "delete" && (
+                <Input
+                  autoFocus
+                  placeholder="e.g. Lead sync to Notion"
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  className="h-9 text-[13px]"
+                />
+              )}
+              <div className="flex items-center justify-end gap-2">
+                <Button variant="ghost" type="button" onClick={closeModal} className="h-8 text-[13px]">Cancel</Button>
+                <Button
                   type="submit"
+                  variant={modalState.type === "delete" ? "destructive" : "default"}
+                  className="h-8 text-[13px]"
                   disabled={isSubmitting || (modalState.type !== "delete" && !inputValue.trim())}
-                  className={`px-4 py-2 rounded-md text-sm font-bold transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed
-                    ${modalState.type === "delete"
-                      ? "bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20"
-                      : "bg-zinc-100 hover:bg-white text-zinc-900"
-                    }
-                  `}
                 >
-                  {isSubmitting ? (
-                    <>
-                      <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-                      Processing...
-                    </>
-                  ) : (
-                    modalState.type === "delete" ? "Delete Pipeline" : (modalState.type === "create" ? "Create Pipeline" : "Save Changes")
-                  )}
-                </button>
+                  {isSubmitting ? "Working..." : modalState.type === "delete" ? "Delete" : modalState.type === "create" ? "Create" : "Save"}
+                </Button>
               </div>
             </form>
-          </div>
+          </Card>
         </div>
       )}
     </main>

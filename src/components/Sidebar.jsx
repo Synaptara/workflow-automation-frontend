@@ -1,203 +1,347 @@
-import { useState, useEffect } from "react";
-import { NavLink } from "react-router-dom";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import Logo from "../assets/orkflo.jpeg";
-import { getUsage } from "../api/workflows";
+import { getUsage, listWorkflows } from "../api/workflows";
 import { DashboardIcon, BlocksIcon, NetworkIcon, IndianRupeeIcon } from "../components/icons";
-import { LayoutGrid, Settings2 } from "lucide-react";
+import { ChevronsUpDown, Search, ChevronLeft, PanelLeft, Activity, Hexagon, CornerDownLeft } from "lucide-react";
+import { Badge } from "./ui/badge";
+
+/* ---------- nav config ---------- */
+
+const NAV_ITEMS = [
+  { to: "/webhooks", label: "Workflows", icon: DashboardIcon, match: ["/webhooks", "/workflows"] },
+  { to: "/templates", label: "Templates", icon: BlocksIcon, match: ["/templates"] },
+  { to: "/history", label: "Executions", icon: Activity, match: ["/history"] },
+  { to: "/integrations", label: "Integrations Vault", icon: NetworkIcon, match: ["/integrations"] },
+  { to: "/billing", label: "Billing & Usage", icon: IndianRupeeIcon, match: ["/billing"] },
+];
+
+const isTyping = (el) =>
+  !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
+
+/* ---------- command palette ---------- */
+
+function CommandPalette({ open, onClose }) {
+  const navigate = useNavigate();
+  const [query, setQuery] = useState("");
+  const [index, setIndex] = useState(0);
+  const [workflows, setWorkflows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const listRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setQuery("");
+    setIndex(0);
+    setLoading(true);
+    listWorkflows()
+      .then((d) => setWorkflows(Array.isArray(d) ? d : []))
+      .catch(() => setWorkflows([]))
+      .finally(() => setLoading(false));
+  }, [open]);
+
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const pages = NAV_ITEMS
+      .filter((i) => !q || i.label.toLowerCase().includes(q))
+      .map((i) => ({ key: i.to, group: "Pages", label: i.label, to: i.to, icon: i.icon }));
+    let wfs = workflows
+      .filter((w) => !q || w.name.toLowerCase().includes(q) || String(w.id).toLowerCase().startsWith(q))
+      .map((w) => ({ key: w.id, group: "Workflows", label: w.name, hint: String(w.id).slice(0, 8), to: `/workflows/${w.id}`, icon: Hexagon }));
+    if (!q) wfs = wfs.slice(0, 6);
+    return [...pages, ...wfs];
+  }, [query, workflows]);
+
+  useEffect(() => { setIndex(0); }, [query]);
+
+  useEffect(() => {
+    listRef.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: "nearest" });
+  }, [index, results]);
+
+  const go = (r) => { onClose(); navigate(r.to); };
+
+  const onKeyDown = (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); setIndex((i) => Math.min(i + 1, results.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setIndex((i) => Math.max(i - 1, 0)); }
+    else if (e.key === "Enter") { e.preventDefault(); if (results[index]) go(results[index]); }
+    else if (e.key === "Escape") { e.preventDefault(); onClose(); }
+  };
+
+  if (!open) return null;
+
+  let lastGroup = null;
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-start justify-center bg-black/60 backdrop-blur-sm px-4 pt-[14vh] animate-in fade-in duration-150"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-[560px] rounded-lg border border-border bg-background shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2.5 px-4 border-b border-border">
+          <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder="Find a page or workflow"
+            className="h-12 flex-1 bg-transparent text-[14px] text-foreground placeholder:text-muted-foreground outline-none"
+          />
+          <kbd className="text-[10px] font-mono text-muted-foreground bg-accent border border-border rounded px-1.5 py-0.5">esc</kbd>
+        </div>
+
+        <div ref={listRef} className="max-h-[340px] overflow-y-auto custom-scrollbar p-1.5">
+          {results.map((r, i) => {
+            const showHeading = r.group !== lastGroup;
+            lastGroup = r.group;
+            const Icon = r.icon;
+            const active = i === index;
+            return (
+              <div key={`${r.group}-${r.key}`}>
+                {showHeading && <p className="px-2.5 pt-2 pb-1 text-[11px] text-muted-foreground">{r.group}</p>}
+                <button
+                  data-active={active}
+                  onMouseMove={() => setIndex(i)}
+                  onClick={() => go(r)}
+                  className={`w-full flex items-center gap-2.5 px-2.5 h-9 rounded-md text-left text-[13px] transition-colors ${
+                    active ? "bg-accent text-foreground" : "text-muted-foreground"
+                  }`}
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span className="truncate flex-1">{r.label}</span>
+                  {r.hint && <span className="font-mono text-[11px] text-muted-foreground">{r.hint}</span>}
+                  {active && <CornerDownLeft className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+                </button>
+              </div>
+            );
+          })}
+
+          {results.length === 0 && (
+            <p className="px-3 py-8 text-center text-[13px] text-muted-foreground">
+              {loading ? "Searching…" : `Nothing matches "${query}".`}
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-4 px-4 py-2 border-t border-border text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1.5"><kbd className="font-mono bg-accent border border-border rounded px-1">↑</kbd><kbd className="font-mono bg-accent border border-border rounded px-1">↓</kbd> Navigate</span>
+          <span className="flex items-center gap-1.5"><kbd className="font-mono bg-accent border border-border rounded px-1">↵</kbd> Open</span>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/* ---------- usage ---------- */
+
+function UsageRing({ pct, tone }) {
+  const r = 11;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg width="28" height="28" viewBox="0 0 28 28" className="-rotate-90">
+      <circle cx="14" cy="14" r={r} fill="none" strokeWidth="2.5" className="stroke-accent" />
+      <circle
+        cx="14" cy="14" r={r} fill="none" strokeWidth="2.5" strokeLinecap="round"
+        strokeDasharray={c} strokeDashoffset={c - (c * pct) / 100}
+        className={`${tone.stroke} transition-all duration-700`}
+      />
+    </svg>
+  );
+}
+
+/* ---------- sidebar ---------- */
 
 export default function Sidebar() {
+  const { pathname } = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [usage, setUsage] = useState({ count: 0, limit: 1000, percentage: 0 });
 
-  // Initialize state from localStorage, defaulting to false if not found
   const [collapsed, setCollapsed] = useState(() => {
     const saved = localStorage.getItem("sidebarCollapsed");
     return saved !== null ? JSON.parse(saved) : false;
   });
 
-  useEffect(() => {
-    getUsage().then(data => setUsage(data)).catch(() => {});
+  const loadUsage = useCallback(() => {
+    getUsage().then((d) => d && setUsage(d)).catch(() => {});
   }, []);
+
+  useEffect(() => { loadUsage(); }, [pathname, loadUsage]);
+
+  useEffect(() => {
+    window.addEventListener("focus", loadUsage);
+    return () => window.removeEventListener("focus", loadUsage);
+  }, [loadUsage]);
 
   useEffect(() => {
     localStorage.setItem("sidebarCollapsed", JSON.stringify(collapsed));
   }, [collapsed]);
 
-  const handleLinkClick = () => {
-    if (mobileOpen) setMobileOpen(false);
-  };
+  useEffect(() => { setMobileOpen(false); }, [pathname]);
 
-  // ENTERPRISE UX FIX: Override the collapsed state if the mobile drawer is open.
-  // This ensures the mobile sidebar is always full-width, without deleting the user's desktop preference.
+  useEffect(() => {
+    const onKey = (e) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen(true);
+        return;
+      }
+      if (!mod && !e.altKey && e.key.toLowerCase() === "f" && !isTyping(e.target)) {
+        e.preventDefault();
+        setPaletteOpen(true);
+        return;
+      }
+      if (e.key === "Escape") setMobileOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const isCollapsed = collapsed && !mobileOpen;
 
-  // Enterprise Tree-Node Renderer
-  const renderNavSection = (title, SectionIcon, items) => (
-    <div className="flex flex-col mb-4">
-      {/* Section Header */}
-      {!isCollapsed && (
-        <div className="flex items-center gap-2 px-3 mb-2 text-[#71717a] animate-in fade-in duration-300">
-          <SectionIcon className="w-4 h-4 shrink-0" />
-          <span className="text-[11px] font-bold uppercase tracking-widest">{title}</span>
-        </div>
-      )}
+  const pct = Math.min(100, Math.max(0, Math.round(usage.percentage ?? (usage.limit ? (usage.count / usage.limit) * 100 : 0))));
+  const tone =
+    pct >= 100 ? { bar: "bg-red-500", stroke: "stroke-red-500", text: "text-red-500" }
+    : pct >= 80 ? { bar: "bg-amber-400", stroke: "stroke-amber-400", text: "text-amber-400" }
+    : { bar: "bg-foreground", stroke: "stroke-foreground", text: "text-muted-foreground" };
+  const remaining = Math.max(0, (usage.limit || 0) - (usage.count || 0));
+  const usageNote = pct >= 100 ? "Limit reached. Upgrade to keep running." : pct >= 80 ? "Nearly at your limit." : `${remaining.toLocaleString()} tasks left`;
 
-      {/* Tree Structure Wrapper */}
-      <div className={`flex flex-col ${!isCollapsed ? "ml-[21px]" : "gap-2 mt-2"}`}>
-        {items.map((item, index) => {
-          const isLast = index === items.length - 1;
-          return (
-            <div key={item.to} className="relative flex items-center mt-1">
-
-              {/* Vertical Trunk Segment */}
-              {!isCollapsed && (
-                <div
-                  className="absolute left-0 w-px bg-[#333333] pointer-events-none z-0 transition-all"
-                  style={{
-                    top: index === 0 ? '-16px' : '-4px',
-                    bottom: isLast ? '50%' : '-4px'
-                  }}
-                />
-              )}
-
-              {/* Horizontal Branch Segment */}
-              {!isCollapsed && (
-                <div className="absolute top-1/2 left-0 w-[12px] h-px bg-[#333333] pointer-events-none z-0" />
-              )}
-
-              <NavLink
-                to={item.to}
-                end={item.end}
-                onClick={handleLinkClick}
-                title={item.label}
-                className={({ isActive }) =>
-                  `relative z-10 flex items-center ${
-                    isCollapsed
-                      ? "justify-center w-10 h-10 mx-auto"
-                      : "gap-3 px-3 py-2.5 w-full ml-[12px]"
-                  } rounded-lg text-sm font-medium transition-all duration-200 ${
-                    isActive
-                      ? "bg-[#141414] text-white shadow-sm border border-white/5"
-                      : "text-[#a1a1aa] hover:text-white hover:bg-[#141414]/50"
-                  }`
-                }
-              >
-                <item.icon className="w-[18px] h-[18px] shrink-0" />
-                {!isCollapsed && (
-                  <span className="whitespace-nowrap animate-in fade-in duration-300">
-                    {item.label}
-                  </span>
-                )}
-              </NavLink>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+  const isActive = (item) => item.match.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
   return (
     <>
-      {/* Mobile Hamburger Toggle */}
       {!mobileOpen && (
         <button
           onClick={() => setMobileOpen(true)}
-          className="md:hidden fixed top-3 left-4 z-[40] w-10 h-10 flex items-center justify-center bg-[#111111] border border-[#222222] rounded-xl text-white shadow-md transition-transform active:scale-95"
+          aria-label="Open sidebar"
+          className="md:hidden fixed top-2.5 left-4 z-[60] w-9 h-9 flex items-center justify-center bg-background border border-border rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors active:scale-95"
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="3" y1="12" x2="21" y2="12" />
-            <line x1="3" y1="6" x2="21" y2="6" />
-            <line x1="3" y1="18" x2="21" y2="18" />
-          </svg>
+          <PanelLeft className="w-[18px] h-[18px]" />
         </button>
       )}
 
-      {/* Mobile Overlay Backdrop */}
       {mobileOpen && (
         <div
-          className="md:hidden fixed inset-0 bg-black/60 z-[40] backdrop-blur-sm animate-in fade-in"
+          className="md:hidden fixed inset-0 bg-background/80 z-[40] backdrop-blur-sm animate-in fade-in"
           onClick={() => setMobileOpen(false)}
         />
       )}
 
-      <aside className={`fixed md:relative inset-y-0 left-0 z-[50] ${isCollapsed ? "w-20" : "w-64"} h-screen bg-[#08090d] border-r border-[#1f1f1f] flex flex-col shrink-0 transition-transform md:transition-[width] duration-300 ease-in-out shadow-2xl md:shadow-[4px_0_24px_rgba(0,0,0,0.2)] ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
-
-        {/* Floating Toggle Button (Desktop Only) */}
+      <aside
+        className={`fixed md:relative inset-y-0 left-0 z-[50] ${isCollapsed ? "w-[60px]" : "w-64"} h-screen bg-background border-r border-border flex flex-col shrink-0 transition-[width,transform] duration-300 ease-in-out ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        }`}
+      >
         <button
-          onClick={() => setCollapsed(!collapsed)} // We still toggle the base state to save to localStorage
-          className="hidden md:flex absolute -right-3 top-5 w-6 h-6 bg-[#111111] border border-[#222222] rounded-full items-center justify-center text-[#71717a] hover:text-white hover:border-[#404040] z-50 shadow-md transition-colors"
+          onClick={() => setCollapsed(!collapsed)}
+          aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="hidden md:flex absolute -right-3 top-4 w-6 h-6 bg-background border border-border rounded-full items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent z-50 transition-colors"
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={`transition-transform duration-300 ${isCollapsed ? "rotate-180" : ""}`}>
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
+          <ChevronLeft className={`w-3.5 h-3.5 transition-transform duration-300 ${isCollapsed ? "rotate-180" : ""}`} />
         </button>
 
-        {/* Workspace Header */}
-        <div className={`h-16 flex items-center border-b border-[#1f1f1f] ${isCollapsed ? "justify-center px-0" : "px-5"}`}>
-          <div className="flex items-center gap-3 w-full cursor-pointer hover:opacity-80 transition-opacity overflow-hidden whitespace-nowrap">
-            {/* Image Logo */}
-            <div className={`w-9 h-9 rounded-[10px] overflow-hidden bg-[#111111] border border-[#222222] flex items-center justify-center shrink-0 shadow-sm ${isCollapsed ? "mx-auto" : ""}`}>
-              <img src={Logo} alt="Orkflo Logo" className="w-full h-full object-cover" />
+        {/* Workspace */}
+        <div className={`h-14 flex items-center ${isCollapsed ? "justify-center px-0" : "px-3"} mt-2`}>
+          <Link
+            to="/webhooks"
+            className="flex items-center gap-2.5 w-full hover:bg-accent/50 p-1.5 rounded-md transition-colors overflow-hidden whitespace-nowrap"
+          >
+            <div className={`w-6 h-6 rounded-md overflow-hidden border border-border shrink-0 ${isCollapsed ? "mx-auto" : ""}`}>
+              <img src={Logo} alt="Orkflo" className="w-full h-full object-cover" />
             </div>
             {!isCollapsed && (
-              <div className="flex flex-col animate-in fade-in duration-300">
-                <span className="text-sm font-semibold text-white leading-tight">Orkflo Inc.</span>
-                <span className="text-[10px] text-[#71717a] font-medium uppercase tracking-wider">Organisation account</span>
-              </div>
+              <>
+                <span className="text-[14px] font-medium text-foreground tracking-tight truncate">Orkflo Inc.</span>
+                <Badge variant="secondary" className="bg-accent text-foreground hover:bg-accent px-1.5 py-0 text-[10px] rounded-full ml-auto">
+                  {usage.plan || "Pro"}
+                </Badge>
+                <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              </>
             )}
-          </div>
-
-          {/* Close button placed on top-right of mobile drawer */}
-          <button
-            onClick={() => setMobileOpen(false)}
-            className="md:hidden ml-auto p-1.5 rounded-lg text-[#71717a] hover:text-white hover:bg-[#141414] transition-colors"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </button>
+          </Link>
         </div>
 
-        <div className="flex flex-col flex-1 overflow-y-auto py-6 px-3 gap-6 overflow-x-hidden custom-scrollbar">
-
-          {/* Main Section */}
-          {renderNavSection("Main", LayoutGrid, [
-            { to: "/workflows", label: "Workflows", icon: DashboardIcon, end: true },
-            { to: "/templates", label: "Templates", icon: BlocksIcon, end: false },
-          ])}
-
-          {/* Configure Section */}
-          {renderNavSection("Configure", Settings2, [
-            { to: "/integrations", label: "Integrations Vault", icon: NetworkIcon, end: false },
-            { to: "/billing", label: "Billing & Usage", icon: IndianRupeeIcon, end: false },
-          ])}
-
-        </div>
-
-        {/* Footer / Plan Limits */}
-        <div className="p-4 border-t border-[#1f1f1f] bg-[#08090d] overflow-hidden whitespace-nowrap min-h-[90px] flex flex-col justify-center">
-          {!isCollapsed ? (
-            <div className="animate-in fade-in duration-300">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-xs font-semibold text-[#a1a1aa]">Task Usage</span>
-                <span className="text-[10px] font-mono text-[#a1a1aa]">{usage.count}/{usage.limit}</span>
-              </div>
-              <div className="w-full bg-[#1f1f1f] rounded-full h-1.5 mb-3 overflow-hidden">
-                <div className="bg-white h-full rounded-full transition-all duration-1000 ease-in-out" style={{ width: `${usage.percentage}%` }}></div>
-              </div>
-              <button className="w-full py-2 text-xs font-bold text-white bg-[#111111] border border-[#222222] hover:border-[#404040] hover:bg-[#141414] rounded-md transition-all shadow-sm">
-                Upgrade Plan
-              </button>
-            </div>
+        {/* Find */}
+        <div className={isCollapsed ? "px-0 py-2 flex justify-center" : "px-3 py-2"}>
+          {isCollapsed ? (
+            <button
+              onClick={() => setPaletteOpen(true)}
+              title="Find (F)"
+              className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+            >
+              <Search className="w-4 h-4" />
+            </button>
           ) : (
-            <div className="flex justify-center items-center animate-in fade-in duration-300">
-              <div className="w-8 h-8 rounded-full border border-[#404040] flex items-center justify-center text-[9px] font-bold text-white bg-[#111111]" title={`Task Usage: ${usage.percentage}%`}>
-                {usage.percentage}%
-              </div>
-            </div>
+            <button
+              onClick={() => setPaletteOpen(true)}
+              className="group w-full h-8 rounded-md border border-border bg-background pl-2.5 pr-2 flex items-center gap-2 text-[13px] text-muted-foreground hover:border-foreground/25 hover:bg-accent/30 transition-colors"
+            >
+              <Search className="w-3.5 h-3.5 shrink-0" />
+              <span className="flex-1 text-left">Find</span>
+              <kbd className="inline-flex h-4 items-center rounded bg-accent px-1.5 font-mono text-[10px] font-medium text-muted-foreground">F</kbd>
+            </button>
           )}
         </div>
+
+        {/* Nav */}
+        <nav className="flex flex-col flex-1 overflow-y-auto overflow-x-hidden px-3 py-2 custom-scrollbar">
+          {NAV_ITEMS.map((item, i) => {
+            const active = isActive(item);
+            return (
+              <div key={item.to}>
+                {i === 3 && <div className="h-px bg-border my-2 mx-1" />}
+                <Link
+                  to={item.to}
+                  title={item.label}
+                  aria-current={active ? "page" : undefined}
+                  className={`flex items-center ${
+                    isCollapsed ? "justify-center w-8 h-8 mx-auto mb-1" : "gap-3 px-2.5 h-8 w-full mb-0.5"
+                  } rounded-md text-[13px] font-medium transition-colors duration-150 ${
+                    active ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                  }`}
+                >
+                  <item.icon className="w-4 h-4 shrink-0" />
+                  {!isCollapsed && <span className="whitespace-nowrap">{item.label}</span>}
+                </Link>
+              </div>
+            );
+          })}
+        </nav>
+
+        {/* Usage */}
+        <Link
+          to="/billing"
+          title={isCollapsed ? `Task usage: ${usage.count}/${usage.limit}` : undefined}
+          className="block border-t border-border px-4 py-3 min-h-[72px] hover:bg-accent/30 transition-colors overflow-hidden whitespace-nowrap"
+        >
+          {isCollapsed ? (
+            <div className="flex justify-center">
+              <UsageRing pct={pct} tone={tone} />
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              <div className="flex justify-between items-center">
+                <span className="text-[12px] font-medium text-muted-foreground">Task usage</span>
+                <span className="text-[11px] font-mono text-muted-foreground tabular-nums">
+                  {Number(usage.count || 0).toLocaleString()}/{Number(usage.limit || 0).toLocaleString()}
+                </span>
+              </div>
+              <div className="w-full bg-accent rounded-full h-1 overflow-hidden">
+                <div className={`${tone.bar} h-full rounded-full transition-all duration-700 ease-out`} style={{ width: `${pct}%` }} />
+              </div>
+              <span className={`text-[11px] ${tone.text}`}>{usageNote}</span>
+            </div>
+          )}
+        </Link>
       </aside>
+
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </>
   );
 }

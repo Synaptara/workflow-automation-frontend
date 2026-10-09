@@ -1,91 +1,136 @@
+import { useEffect, useState } from "react";
+import { Link, useLocation, useMatch, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { useNavigate, useLocation } from "react-router-dom";
 import { useGlobalSocket } from "../hooks/useGlobalSocket";
+import { getWorkflow } from "../api/workflows";
+import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
+import { Bell, ChevronRight, CreditCard, Plug, Activity, LogOut } from "lucide-react";
+
+const PAGES = [
+  { prefix: "/webhooks", title: "Workflows" },
+  { prefix: "/templates", title: "Templates" },
+  { prefix: "/history", title: "Executions" },
+  { prefix: "/integrations", title: "Integrations Vault" },
+  { prefix: "/billing", title: "Billing & Usage" },
+];
 
 export default function TopNav() {
   const { logout } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
+  const { pathname } = useLocation();
   const { unreadCount, clearUnread } = useGlobalSocket();
+  const builderMatch = useMatch("/workflows/:id");
+  const workflowId = builderMatch?.params.id;
 
-  // Retrieve the username stored during login (fallback to "Account" if missing)
+  const [workflowName, setWorkflowName] = useState("");
+
   const username = localStorage.getItem("username") || "Account";
+  const email = localStorage.getItem("email");
+  const initials = username.substring(0, 2).toUpperCase();
 
-  // Dynamic breadcrumb text based on route
-  const getPageTitle = () => {
-    if (location.pathname === "/") return "Workflows";
-    if (location.pathname.includes("/workflows/")) return "Workflow Builder";
-    if (location.pathname === "/integrations") return "Integrations Vault";
-    if (location.pathname === "/billing") return "Billing";
-    if (location.pathname === "/history") return "Global Run History";
-    return "Dashboard";
-  };
+  useEffect(() => {
+    if (!workflowId) { setWorkflowName(""); return; }
+    let cancelled = false;
+    getWorkflow(workflowId)
+      .then((w) => { if (!cancelled) setWorkflowName(w?.name || ""); })
+      .catch(() => { if (!cancelled) setWorkflowName(""); });
+    return () => { cancelled = true; };
+  }, [workflowId]);
 
-  const handleNotificationsClick = () => {
+  const page = PAGES.find((p) => pathname === p.prefix || pathname.startsWith(`${p.prefix}/`));
+  const crumbs = workflowId
+    ? [{ label: "Workflows", to: "/webhooks" }, { label: workflowName || "Untitled workflow" }]
+    : [{ label: page?.title || "Workflows" }];
+
+  const openNotifications = () => {
     clearUnread();
     navigate("/history");
   };
 
   return (
-    <header className="h-16 border-b border-[#1b1b1e] bg-surface flex items-center justify-between pl-16 pr-4 md:px-8 shrink-0 z-10 shadow-sm relative">
+    <header className="h-14 border-b border-border bg-background flex items-center justify-between gap-4 px-4 md:px-6 shrink-0 z-10 sticky top-0 w-full">
+      {/* Breadcrumbs */}
+      <nav aria-label="Breadcrumb" className="flex-1 min-w-0 pl-10 md:pl-0">
+        <ol className="flex items-center gap-1.5 text-[14px] tracking-tight min-w-0">
+          {crumbs.map((c, i) => {
+            const last = i === crumbs.length - 1;
+            return (
+              <li key={i} className="flex items-center gap-1.5 min-w-0">
+                {i > 0 && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />}
+                {c.to && !last ? (
+                  <Link to={c.to} className="text-muted-foreground hover:text-foreground transition-colors">
+                    {c.label}
+                  </Link>
+                ) : (
+                  <span aria-current={last ? "page" : undefined} className="font-medium text-foreground truncate">
+                    {c.label}
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      </nav>
 
-      {/* Left Section: Breadcrumbs */}
-      <div className="flex items-center gap-3.5">
+      {/* Actions */}
+      <div className="flex items-center gap-2 shrink-0">
         <button
-          onClick={() => navigate(-1)}
-          aria-label="Go Back"
-          className="hidden md:flex w-7 h-7 rounded-full border border-[#222222] bg-[#111111] items-center justify-center text-[#71717a] hover:text-white hover:border-[#404040] transition shadow-sm"
-          type="button"
+          onClick={openNotifications}
+          title={unreadCount > 0 ? `${unreadCount} new ${unreadCount === 1 ? "run" : "runs"}` : "Executions"}
+          aria-label="Notifications"
+          className="relative w-8 h-8 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
         >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" viewBox="0 0 24 24">
-            <line x1="19" y1="12" x2="5" y2="12"></line>
-            <polyline points="12 19 5 12 12 5"></polyline>
-          </svg>
-        </button>
-
-        <h1 className="text-xs font-bold text-white tracking-wide pt-0.5">{getPageTitle()}</h1>
-        <span className="text-zinc-600 font-light hidden sm:block">/</span>
-        <span className="text-xs font-normal text-[#a1a1aa] hidden sm:block pt-0.5">Production Environment</span>
-      </div>
-
-      {/* Right Section: Actions & Profile */}
-      <div className="flex items-center gap-4 sm:gap-5">
-
-        <button onClick={handleNotificationsClick} aria-label="Notifications" className="relative text-[#a1a1aa] hover:text-white transition-colors">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-          </svg>
+          <Bell className="w-4 h-4" />
           {unreadCount > 0 && (
-            <span className="absolute -top-1.5 -right-2 bg-status-success text-[#09090b] text-[9px] font-bold px-1.5 rounded-full ring-2 ring-[#09090b] animate-in zoom-in">
-              {unreadCount}
+            <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-blue-500 text-white text-[10px] font-medium leading-4 text-center ring-2 ring-background tabular-nums">
+              {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           )}
         </button>
 
-        <div className="w-px h-4 bg-[#222222]"></div>
+        <DropdownMenu>
+          <DropdownMenuTrigger className="outline-none rounded-full focus-visible:ring-2 focus-visible:ring-ring" aria-label="Account menu">
+            <Avatar className="w-8 h-8 border border-border cursor-pointer hover:ring-1 hover:ring-foreground/20 transition-all bg-accent text-foreground">
+              <AvatarImage src={`https://avatar.vercel.sh/${encodeURIComponent(username)}?colors=111111,222222,333333`} />
+              <AvatarFallback className="text-[11px] font-medium bg-accent">{initials}</AvatarFallback>
+            </Avatar>
+          </DropdownMenuTrigger>
 
-        {/* User Profile Badge */}
-        <div className="flex items-center gap-2 select-none">
-          <div className="w-6 h-6 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center text-zinc-400">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-          </div>
-          <span className="text-xs font-medium text-zinc-300 hidden sm:block max-w-[120px] truncate">
-            {username}
-          </span>
-        </div>
-
-        <button
-          onClick={() => {
-            logout();
-            navigate("/login");
-          }}
-          className="text-xs font-medium text-[#a1a1aa] hover:text-[#f85149] transition-colors ml-1 sm:ml-0"
-        >
-          Log out
-        </button>
+          <DropdownMenuContent align="end" className="w-60 mt-1 text-[13px]">
+            <DropdownMenuLabel className="font-normal">
+              <div className="flex flex-col gap-1">
+                <p className="text-[14px] font-medium leading-none text-foreground truncate">{username}</p>
+                {email && <p className="text-[12px] leading-none text-muted-foreground truncate">{email}</p>}
+              </div>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="cursor-pointer" onClick={() => navigate("/history")}>
+              <Activity className="w-4 h-4 mr-2" /> Executions
+            </DropdownMenuItem>
+            <DropdownMenuItem className="cursor-pointer" onClick={() => navigate("/integrations")}>
+              <Plug className="w-4 h-4 mr-2" /> Integrations Vault
+            </DropdownMenuItem>
+            <DropdownMenuItem className="cursor-pointer" onClick={() => navigate("/billing")}>
+              <CreditCard className="w-4 h-4 mr-2" /> Billing & Usage
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              variant="destructive"
+              className="cursor-pointer"
+              onClick={() => { logout(); navigate("/login"); }}
+            >
+              <LogOut className="w-4 h-4 mr-2" /> Log out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );

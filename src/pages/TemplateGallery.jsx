@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getTemplates, useTemplate } from "../api/workflows";
+import { Card } from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { Activity, LayoutTemplate, ArrowRight, Zap } from "lucide-react";
 
 export default function TemplateGallery() {
   const [templates, setTemplates] = useState([]);
@@ -21,7 +24,7 @@ export default function TemplateGallery() {
         name: template.name,
         steps: template.steps,
       });
-      // Route the user directly into their new pre-built workflow!
+      // Route the user directly into their new pre-built workflow
       navigate(`/workflows/${newWorkflow.id}`);
     } catch (error) {
       alert("Failed to clone template");
@@ -29,47 +32,71 @@ export default function TemplateGallery() {
     }
   };
 
-  if (loading) return <div className="p-10 text-center text-[#71717a]">Loading templates...</div>;
+  if (loading) return (
+    <div className="flex h-full items-center justify-center bg-background">
+      <Activity className="w-5 h-5 text-muted-foreground animate-spin" />
+    </div>
+  );
 
   return (
-    <div className="h-full overflow-y-auto px-4 sm:px-10 py-6 sm:py-7 bg-canvas custom-scrollbar">
-      <div className="max-w-6xl mx-auto flex flex-col gap-8">
+    <div className="h-full overflow-y-auto px-4 py-6 sm:px-6 md:px-8 bg-background custom-scrollbar">
+      <div className="max-w-[1200px] mx-auto flex flex-col gap-8 pb-20">
 
-        {/* Header */}
-        <div>
-          <h1 className="text-3xl font-serif text-white tracking-tight">Template Gallery</h1>
-          <p className="text-sm text-[#a1a1aa] mt-2">Start automating in seconds with pre-built workflow templates.</p>
+        {/* Section Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Template Gallery</h1>
+            <p className="text-[13px] text-muted-foreground mt-1">Start automating in seconds with pre-built workflow templates.</p>
+          </div>
         </div>
 
-        {/* Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {templates.map((tpl) => (
-            <div key={tpl.id} className="group bg-[#08090e] border border-[#222222] rounded-2xl p-6 flex flex-col gap-4 hover:border-[#404040] transition-all shadow-sm">
-              <div className="flex items-center gap-4 border-b border-[#1f1f1f] pb-4">
-                <div
-                  className="w-12 h-12 rounded-xl flex items-center justify-center shadow-inner"
-                  style={{ backgroundColor: tpl.color || '#333' }}
-                >
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                </div>
-                <h3 className="text-base font-bold text-white leading-tight">{tpl.name}</h3>
-              </div>
-
-              <p className="text-xs text-[#a1a1aa] leading-relaxed flex-1">
-                {tpl.description}
-              </p>
-
-              <button
-                onClick={() => handleUseTemplate(tpl)}
-                disabled={cloning === tpl.id}
-                className="w-full mt-2 bg-white hover:bg-[#e4e4e7] text-black text-sm font-bold py-2.5 rounded-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {cloning === tpl.id ? "Creating Workflow..." : "Use Template"}
-                {!cloning && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>}
-              </button>
+        {/* Dynamic State: Show Empty Placeholder OR Grid of Templates */}
+        {templates.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-24 border border-border rounded-xl bg-accent/10 border-dashed mt-4">
+            <div className="w-16 h-16 rounded-2xl bg-accent flex items-center justify-center mb-5 shadow-sm border border-border/50">
+              <LayoutTemplate className="w-8 h-8 text-muted-foreground" />
             </div>
-          ))}
-        </div>
+            <h3 className="text-[16px] font-semibold text-foreground tracking-tight mb-2">No templates found</h3>
+            <p className="text-[13px] text-muted-foreground max-w-md text-center leading-relaxed">
+              We are actively working on building a library of high-quality templates to help you orchestrate your integrations faster. Check back soon!
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {templates.map((tpl) => (
+              <Card key={tpl.id} className="group bg-background border border-border rounded-xl p-5 flex flex-col hover:border-foreground/30 transition-colors shadow-sm min-h-[220px]">
+
+                <div className="flex items-center gap-4 border-b border-border pb-4 mb-4">
+                  <div
+                    className="w-10 h-10 rounded-md flex items-center justify-center shadow-sm shrink-0 border border-border/50"
+                    style={{ backgroundColor: tpl.color || 'var(--accent)' }}
+                  >
+                    <Zap className="w-5 h-5 text-white" />
+                  </div>
+                  <h3 className="text-[14px] font-semibold text-foreground tracking-tight line-clamp-2">
+                    {tpl.name}
+                  </h3>
+                </div>
+
+                <p className="text-[12px] text-muted-foreground leading-relaxed flex-1 line-clamp-3 mb-4">
+                  {tpl.description}
+                </p>
+
+                <Button
+                  onClick={() => handleUseTemplate(tpl)}
+                  disabled={cloning === tpl.id}
+                  className="w-full h-9 font-medium text-[13px] gap-2 mt-auto"
+                >
+                  {cloning === tpl.id ? (
+                    <><Activity className="w-4 h-4 animate-spin" /> Creating...</>
+                  ) : (
+                    <>Use Template <ArrowRight className="w-4 h-4" /></>
+                  )}
+                </Button>
+              </Card>
+            ))}
+          </div>
+        )}
 
       </div>
     </div>

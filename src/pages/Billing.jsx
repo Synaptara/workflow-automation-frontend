@@ -1,5 +1,134 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import api from "../api/axios";
+import { Button } from "../components/ui/button";
+import { Badge } from "../components/ui/badge";
+import { Check, Minus, Sparkles, X, Receipt, RefreshCw, ArrowUpRight } from "lucide-react";
+
+/* ---------- helpers ---------- */
+
+const isUnlimited = (v) => typeof v === "string" && v.toLowerCase() === "unlimited";
+const fmt = (v) => (isUnlimited(v) ? "Unlimited" : Number(v ?? 0).toLocaleString());
+
+function toneFor(pct) {
+  if (pct >= 100) return { bar: "bg-red-500", text: "text-red-500", label: "Limit reached" };
+  if (pct >= 80) return { bar: "bg-amber-400", text: "text-amber-400", label: "Nearly at your limit" };
+  return { bar: "bg-foreground", text: "text-muted-foreground", label: "" };
+}
+
+const PLANS = [
+  {
+    key: "free",
+    name: "Free",
+    blurb: "For trying Orkflo out.",
+    rows: [
+      ["Workflows", "2"],
+      ["Tasks per month", "1,000"],
+      ["Priority support", false],
+      ["Custom webhooks", true],
+    ],
+  },
+  {
+    key: "pro",
+    name: "Pro",
+    blurb: "For teams running automations in production.",
+    rows: [
+      ["Workflows", "Unlimited"],
+      ["Tasks per month", "10,000"],
+      ["Priority support", true],
+      ["Custom webhooks", true],
+    ],
+  },
+];
+
+/* ---------- small components ---------- */
+
+function Stat({ label, value, hint }) {
+  return (
+    <div className="flex flex-col gap-1 px-4 py-3">
+      <span className="text-[12px] text-muted-foreground">{label}</span>
+      <div className="flex items-baseline gap-2">
+        <span className="text-xl font-semibold tracking-tight text-foreground tabular-nums">{value}</span>
+        {hint && <span className="text-[11px] text-muted-foreground">{hint}</span>}
+      </div>
+    </div>
+  );
+}
+
+function Meter({ label, used, limit, pct, note }) {
+  const tone = toneFor(pct);
+  const unlimited = isUnlimited(limit);
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between text-[13px]">
+        <span className="font-medium text-foreground">{label}</span>
+        <span className="font-mono text-[12px] text-muted-foreground tabular-nums">
+          <span className="text-foreground">{fmt(used)}</span> / {fmt(limit)}
+        </span>
+      </div>
+      <div
+        className="w-full bg-accent rounded-full h-1.5 overflow-hidden"
+        role="progressbar"
+        aria-valuenow={unlimited ? undefined : Math.round(pct)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={label}
+      >
+        <div className={`h-full rounded-full transition-all duration-700 ease-out ${tone.bar}`} style={{ width: `${unlimited ? 4 : pct}%` }} />
+      </div>
+      <div className="flex items-center justify-between text-[12px]">
+        <span className={tone.label ? tone.text : "text-muted-foreground"}>{tone.label || note}</span>
+        {!unlimited && <span className="text-muted-foreground tabular-nums">{Math.round(pct)}% used</span>}
+      </div>
+    </div>
+  );
+}
+
+function PlanCard({ plan, current, onSelect }) {
+  const isPro = plan.key === "pro";
+  return (
+    <div className={`flex flex-col rounded-lg border bg-card ${current ? "border-foreground/40" : "border-border"}`}>
+      <div className="flex items-start justify-between gap-3 p-5 pb-4">
+        <div className="flex flex-col gap-1">
+          <h3 className="text-[15px] font-semibold tracking-tight text-foreground flex items-center gap-2">
+            {isPro && <Sparkles className="w-4 h-4 text-blue-500" />}
+            {plan.name}
+          </h3>
+          <p className="text-[12px] text-muted-foreground">{plan.blurb}</p>
+        </div>
+        {current && (
+          <span className="text-[11px] font-medium text-foreground border border-border rounded-full px-2 py-0.5 bg-background">
+            Current
+          </span>
+        )}
+      </div>
+
+      <ul className="px-5 pb-5 flex flex-col divide-y divide-border">
+        {plan.rows.map(([label, value]) => (
+          <li key={label} className="flex items-center justify-between py-2.5 text-[13px]">
+            <span className="text-muted-foreground">{label}</span>
+            {typeof value === "boolean" ? (
+              value ? <Check className="w-4 h-4 text-foreground" /> : <Minus className="w-4 h-4 text-muted-foreground/60" />
+            ) : (
+              <span className="font-medium text-foreground tabular-nums">{value}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      <div className="mt-auto px-5 py-3 border-t border-border">
+        {current ? (
+          <span className="text-[12px] text-muted-foreground">You're on this plan.</span>
+        ) : (
+          <Button onClick={onSelect} variant={isPro ? "default" : "outline"} className="w-full h-8 text-[12px] font-medium">
+            {isPro ? "Upgrade to Pro" : "Switch to Free"}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- page ---------- */
 
 export default function Billing() {
   const [usage, setUsage] = useState({
@@ -11,154 +140,221 @@ export default function Billing() {
     workflow_limit: 2,
   });
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
+  const [showBetaModal, setShowBetaModal] = useState(false);
+
+  const fetchUsage = useCallback(async (manual = false) => {
+    if (manual) setRefreshing(true);
+    try {
+      const { data } = await api.get("/usage/");
+      setUsage((prev) => ({ ...prev, ...data }));
+      setError("");
+    } catch (err) {
+      console.error("Failed to load usage data", err);
+      setError("Couldn't load your usage. Showing the last known values.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchUsage(); }, [fetchUsage]);
 
   useEffect(() => {
-    const fetchUsage = async () => {
-      try {
-        const { data } = await api.get("/usage/");
-        setUsage(data);
-      } catch (err) {
-        console.error("Failed to load usage data", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchUsage();
-  }, []);
+    if (!showBetaModal) return;
+    const onKey = (e) => { if (e.key === "Escape") setShowBetaModal(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showBetaModal]);
 
   if (loading) {
     return (
-      <div className="h-full flex items-center justify-center bg-[#060607]">
-        <div className="animate-pulse flex flex-col items-center gap-4">
-          <div className="w-8 h-8 border-4 border-white/20 border-t-zinc-400 rounded-full animate-spin"></div>
-          <p className="text-zinc-500 text-sm font-medium tracking-wide">Loading billing data...</p>
+      <div className="h-full px-4 py-6 sm:px-6 md:px-8 bg-background">
+        <div className="max-w-[1200px] mx-auto flex flex-col gap-6 animate-pulse">
+          <div className="h-8 w-48 rounded bg-accent" />
+          <div className="h-[72px] rounded-lg bg-accent/60" />
+          <div className="grid lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 h-72 rounded-lg bg-accent/60" />
+            <div className="h-72 rounded-lg bg-accent/60" />
+          </div>
         </div>
       </div>
     );
   }
 
-  const workflowPercentage =
-    usage.workflow_limit === "Unlimited"
-      ? 0
-      : Math.min(100, (usage.workflow_count / usage.workflow_limit) * 100);
+  const planName = String(usage.plan || "Free");
+  const planKey = planName.toLowerCase();
+  const tasksUnlimited = isUnlimited(usage.task_limit);
+  const workflowsUnlimited = isUnlimited(usage.workflow_limit);
+
+  const taskPct = tasksUnlimited
+    ? 0
+    : Math.min(100, Number(usage.task_percentage ?? (usage.task_limit ? (usage.task_count / usage.task_limit) * 100 : 0)));
+  const workflowPct = workflowsUnlimited
+    ? 0
+    : Math.min(100, usage.workflow_limit ? (usage.workflow_count / usage.workflow_limit) * 100 : 0);
+
+  const tasksLeft = tasksUnlimited ? "Unlimited" : Math.max(0, usage.task_limit - usage.task_count).toLocaleString();
+  const nearLimit = taskPct >= 80 || workflowPct >= 100;
 
   return (
-    <div className="h-full overflow-y-auto px-4 sm:px-10 py-6 sm:py-8 space-y-6 sm:space-y-8 custom-scrollbar bg-[#060607]">
-      <div className="max-w-5xl mx-auto flex flex-col gap-8">
+    <div className="h-full overflow-y-auto px-4 py-6 sm:px-6 md:px-8 bg-background custom-scrollbar">
+      <div className="max-w-[1200px] mx-auto flex flex-col gap-6 pb-20">
 
-        {/* Section Header */}
-        <div className="pt-2">
-          <h1 className="text-3xl font-serif text-zinc-100 tracking-tight">
-            Billing & Usage
-          </h1>
-          <p className="text-sm text-zinc-400 mt-2 font-medium">
-            Manage your subscription plan, view limits, and track automated task usage.
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Billing & Usage</h1>
+            <p className="text-[13px] text-muted-foreground max-w-[60ch]">
+              Your plan, what you've used this cycle, and what's left.
+            </p>
+          </div>
+          <button
+            onClick={() => fetchUsage(true)}
+            disabled={refreshing}
+            title="Refresh"
+            className="w-8 h-8 shrink-0 rounded-md flex items-center justify-center border border-border bg-background hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin text-foreground" : ""}`} />
+          </button>
+        </div>
+
+        {error && (
+          <div className="rounded-md border border-red-500/25 bg-red-500/5 px-3 py-2 text-[13px] text-red-500 flex items-center justify-between">
+            {error}
+            <button onClick={() => fetchUsage(true)} className="underline underline-offset-4">Retry</button>
+          </div>
+        )}
+
+        {/* Beta banner */}
+        <div className="flex items-start gap-3 rounded-lg border border-border bg-card px-4 py-3">
+          <Sparkles className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
+          <p className="text-[13px] text-muted-foreground leading-relaxed">
+            <span className="text-foreground font-medium">Early access beta.</span> Billing is switched off, and every account gets unlimited workflows and 10,000 tasks a month for free.{" "}
+            <button onClick={() => setShowBetaModal(true)} className="text-foreground underline underline-offset-4 hover:no-underline">
+              Learn more
+            </button>
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pb-12">
+        {/* Overview */}
+        <div className="grid grid-cols-2 md:grid-cols-4 rounded-lg border border-border bg-card divide-border divide-x [&>*:nth-child(n+3)]:border-t md:[&>*:nth-child(n+3)]:border-t-0 [&>*]:border-border [&>*:nth-child(3)]:border-l-0 md:[&>*:nth-child(3)]:border-l">
+          <Stat label="Plan" value={planName} />
+          <Stat label="Tasks used" value={fmt(usage.task_count)} hint={tasksUnlimited ? undefined : `of ${fmt(usage.task_limit)}`} />
+          <Stat label="Tasks left" value={tasksLeft} />
+          <Stat label="Workflows" value={fmt(usage.workflow_count)} hint={workflowsUnlimited ? undefined : `of ${fmt(usage.workflow_limit)}`} />
+        </div>
 
-          {/* Left Column: Plan Details */}
-          <div className="lg:col-span-2 space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-            {/* Current Plan Card */}
-            <div className="bg-[#09090b] border border-zinc-800/80 rounded-xl p-6 shadow-sm">
-              <div className="flex items-start justify-between mb-6">
-                <div>
-                  <h2 className="text-lg font-semibold text-zinc-100 tracking-tight">Current Plan</h2>
-                  <p className="text-[13px] text-zinc-400 font-medium mt-1">You are currently on the {usage.plan} tier.</p>
-                </div>
-                <span className="inline-flex items-center px-3 py-1 rounded-md text-[11px] font-bold bg-zinc-100 text-zinc-900 uppercase tracking-wider shadow-sm">
-                  {usage.plan}
-                </span>
+          {/* Usage */}
+          <section className="lg:col-span-2 rounded-lg border border-border bg-card flex flex-col">
+            <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border">
+              <div className="flex flex-col gap-0.5">
+                <h2 className="text-[14px] font-semibold tracking-tight text-foreground">Usage</h2>
+                <p className="text-[12px] text-muted-foreground">Tasks reset at the start of each billing cycle.</p>
               </div>
-
-              <div className="flex flex-col sm:flex-row items-center gap-3 pt-5 border-t border-zinc-800/50">
-                <button className="w-full sm:w-auto px-4 py-2 bg-zinc-100 hover:bg-white text-zinc-900 text-xs font-bold rounded-md transition-all shadow-[0_0_10px_rgba(255,255,255,0.1)] hover:shadow-[0_0_15px_rgba(255,255,255,0.2)]">
-                  Upgrade Plan
-                </button>
-                <button className="w-full sm:w-auto px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-zinc-100 text-xs font-semibold rounded-md transition-colors shadow-sm">
-                  Manage Billing
-                </button>
-              </div>
+              <Badge variant="secondary" className="bg-accent text-foreground hover:bg-accent px-2 py-0.5 text-[11px] rounded-full font-medium">
+                {planName}
+              </Badge>
             </div>
 
-            {/* Usage Metrics Card */}
-            <div className="bg-[#09090b] border border-zinc-800/80 rounded-xl p-6 space-y-8 shadow-sm">
-              <h2 className="text-lg font-semibold text-zinc-100 tracking-tight">Usage Limits</h2>
-
-              {/* Task Execution Progress */}
-              <div>
-                <div className="flex justify-between text-[13px] mb-2.5">
-                  <span className="font-semibold text-zinc-300">Task Executions</span>
-                  <span className="text-zinc-500 font-mono font-medium">
-                    <span className="text-zinc-200">{usage.task_count}</span> / {usage.task_limit}
-                  </span>
-                </div>
-                <div className="w-full bg-zinc-900/80 rounded-full h-2.5 overflow-hidden border border-zinc-800/50 shadow-inner">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      usage.task_percentage >= 90 ? "bg-red-500/80" : "bg-emerald-500/80"
-                    }`}
-                    style={{ width: `${usage.task_percentage}%` }}
-                  ></div>
-                </div>
-                <p className="text-[11px] text-zinc-500 font-medium mt-2">
-                  Tasks reset at the beginning of your billing cycle.
-                </p>
-              </div>
-
-              {/* Workflow Limit Progress */}
-              <div>
-                <div className="flex justify-between text-[13px] mb-2.5">
-                  <span className="font-semibold text-zinc-300">Active Workflows</span>
-                  <span className="text-zinc-500 font-mono font-medium">
-                    <span className="text-zinc-200">{usage.workflow_count}</span> / {usage.workflow_limit}
-                  </span>
-                </div>
-                <div className="w-full bg-zinc-900/80 rounded-full h-2.5 overflow-hidden border border-zinc-800/50 shadow-inner">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      workflowPercentage >= 100 ? "bg-orange-500/80" : "bg-blue-500/80"
-                    }`}
-                    style={{ width: `${workflowPercentage}%` }}
-                  ></div>
-                </div>
-                <p className="text-[11px] text-zinc-500 font-medium mt-2">
-                  Upgrade to Pro to unlock unlimited workflows.
-                </p>
-              </div>
+            <div className="p-5 flex flex-col gap-7">
+              <Meter
+                label="Task executions"
+                used={usage.task_count}
+                limit={usage.task_limit}
+                pct={taskPct}
+                note={`${tasksLeft} left this cycle`}
+              />
+              <Meter
+                label="Workflows"
+                used={usage.workflow_count}
+                limit={usage.workflow_limit}
+                pct={workflowPct}
+                note={workflowsUnlimited ? "No limit on your plan" : `${Math.max(0, usage.workflow_limit - usage.workflow_count)} more available`}
+              />
             </div>
-          </div>
 
-          {/* Right Column: Upgrade Promo */}
-          <div className="relative overflow-hidden bg-[#09090b] border border-emerald-500/20 rounded-xl p-6 flex flex-col justify-between min-h-[300px] shadow-[0_0_15px_rgba(16,185,129,0.05)]">
-            <div className="absolute top-0 right-0 p-32 bg-emerald-500/10 rounded-full blur-[80px] -mr-20 -mt-20 pointer-events-none"></div>
-
-            <div className="relative z-10">
-              <h3 className="text-lg font-semibold text-emerald-400 tracking-tight mb-2">Unlock Pro</h3>
-              <p className="text-[13px] text-zinc-400 font-medium leading-relaxed mb-6">
-                Remove workflow limits, access premium integration nodes, and get higher task execution caps for your growing enterprise.
+            <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-border">
+              <p className="text-[12px] text-muted-foreground">
+                {nearLimit ? "You're close to a limit. Upgrade to keep your workflows running." : "Need more room? Compare plans below."}
               </p>
+              <Button onClick={() => setShowBetaModal(true)} variant={nearLimit ? "default" : "outline"} className="h-8 px-3 text-[12px] font-medium shrink-0">
+                {nearLimit ? "Upgrade" : "Manage billing"}
+              </Button>
+            </div>
+          </section>
 
-              <ul className="space-y-3 mb-8">
-                {["Unlimited workflows", "10,000 tasks / month", "Priority support", "Custom webhooks"].map((feature, i) => (
-                  <li key={i} className="flex items-center gap-2.5 text-[13px] font-medium text-zinc-300">
-                    <svg className="w-4 h-4 text-emerald-400/80 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"></path>
-                    </svg>
-                    {feature}
-                  </li>
-                ))}
-              </ul>
+          {/* Invoices */}
+          <section className="rounded-lg border border-border bg-card flex flex-col">
+            <div className="px-5 py-4 border-b border-border">
+              <h2 className="text-[14px] font-semibold tracking-tight text-foreground">Invoices</h2>
+            </div>
+            <div className="flex flex-1 flex-col items-center justify-center text-center gap-3 px-6 py-10">
+              <div className="w-10 h-10 rounded-md border border-border bg-background flex items-center justify-center">
+                <Receipt className="w-5 h-5 text-muted-foreground" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <p className="text-[14px] font-medium text-foreground">No invoices yet</p>
+                <p className="text-[13px] text-muted-foreground max-w-[30ch]">
+                  Invoices will appear here once billing is turned on.
+                </p>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        {/* Plans */}
+        <section className="flex flex-col gap-3">
+          <h2 className="text-[13px] font-medium text-foreground">Plans</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-[760px]">
+            {PLANS.map((p) => (
+              <PlanCard key={p.key} plan={p} current={planKey === p.key} onSelect={() => setShowBetaModal(true)} />
+            ))}
+          </div>
+        </section>
+      </div>
+
+      {/* Beta modal */}
+      {showBetaModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150"
+          onClick={() => setShowBetaModal(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-lg border border-border bg-background shadow-2xl flex flex-col animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 p-5 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-md border border-border bg-card flex items-center justify-center">
+                  <Sparkles className="w-5 h-5 text-blue-500" />
+                </div>
+                <div>
+                  <h3 className="text-[15px] font-semibold tracking-tight text-foreground">Early access beta</h3>
+                  <p className="text-[12px] text-muted-foreground">Billing is currently disabled.</p>
+                </div>
+              </div>
+              <Button variant="ghost" size="icon" className="w-8 h-8 -mr-2 -mt-1 text-muted-foreground hover:text-foreground" onClick={() => setShowBetaModal(false)}>
+                <X className="w-4 h-4" />
+              </Button>
             </div>
 
-            <button className="relative z-10 w-full py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-md text-xs font-bold transition-colors shadow-sm">
-              View Pricing Plans
-            </button>
+            <div className="px-5 pb-5 flex flex-col gap-4">
+              <p className="text-[13px] text-muted-foreground leading-relaxed">
+                Orkflo is in public beta. While we test and scale the platform, every account gets{" "}
+                <span className="text-foreground font-medium">unlimited workflows</span> and{" "}
+                <span className="text-foreground font-medium">10,000 task executions a month</span> at no cost. Nothing to upgrade right now.
+              </p>
+              <Button onClick={() => setShowBetaModal(false)} className="w-full h-9 text-[13px] font-medium">
+                Got it
+              </Button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

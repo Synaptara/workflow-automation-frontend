@@ -1,17 +1,13 @@
-import { useState, useEffect } from "react";
-import { getCredentials, saveCredential } from "../api/workflows";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { getCredentials, saveCredential, listWorkflows } from "../api/workflows";
+import { DiscordIcon, RobotIcon, SlackIcon, GithubIcon, FileSheetIcon } from "../components/icons";
+import { Search, X, Link2, Key, ShieldCheck, Check, AlertTriangle, ArrowUpRight, Loader2, Plug, CircleCheck, CircleAlert } from "lucide-react";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 
-// --- ICON IMPORTS ---
-import {
-  DiscordIcon,
-  RobotIcon,
-  SlackIcon,
-  GithubIcon,
-  FileSheetIcon
-} from "../components/icons";
-import { Search, ChevronRight, X, Link2, Key, ShieldCheck } from "lucide-react";
+/* ---------- config ---------- */
 
-// 1. Define OAuth configurations and scopes for our specific apps
 const OAUTH_CONFIG = {
   github: {
     clientId: import.meta.env.VITE_GITHUB_CLIENT_ID,
@@ -24,94 +20,245 @@ const OAUTH_CONFIG = {
     scope: "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.readonly email profile",
   },
   discord: {
-    clientId: import.meta.env.VITE_DISCORD_CLIENT_ID, // You will need to add this to .env later
+    clientId: import.meta.env.VITE_DISCORD_CLIENT_ID,
     authUrl: "https://discord.com/api/oauth2/authorize",
     scope: "identify bot applications.commands",
   },
-
 };
 
+const AUTH_LABEL = { oauth: "OAuth", api_key: "API key", webhook: "Webhook URL" };
+
 const AVAILABLE_INTEGRATIONS = [
-  {
-    id: "groq_ai",
-    name: "Groq AI",
-    description: "Lightning fast open-source language models.",
-    authType: "api_key",
-    configKey: "api_key",
-    icon: <RobotIcon className="w-5 h-5 text-orange-500" />
-  },
-  {
-    id: "discord",
-    name: "Discord",
-    description: "Connect your account and invite the Orkflo bot to your servers.",
-    authType: "oauth", // Upgraded to OAuth
-    icon: <DiscordIcon className="w-5 h-5" />
-  },
-  {
-    id: "github",
-    name: "GitHub",
-    description: "Link pull requests and automate repository workflows.",
-    authType: "oauth",
-    icon: <GithubIcon className="w-5 h-5 text-white" />
-  },
-  {
-    id: "google_sheets",
-    name: "Google Sheets",
-    description: "Read and write data directly to your spreadsheets.",
-    authType: "oauth",
-    icon: <FileSheetIcon className="w-5 h-5" />
-  },
-  {
-    id: "slack",
-    name: "Slack",
-    description: "Post updates directly to your Slack channels via Webhook.",
-    authType: "webhook",
-    configKey: "webhook_url",
-    icon: <SlackIcon className="w-5 h-5" />
-  },
-  {
-      id: "notion",
-      name: "Notion",
-      description: "Connect to your workspace and automate database items.",
-      authType: "api_key",
-      configKey: "api_key",
-      icon: (
-        <div className="w-5 h-5 bg-zinc-100 text-black font-serif font-bold flex items-center justify-center rounded-[4px] text-xs">
-          N
-        </div>
-      )
-    },
+  { id: "groq_ai", name: "Groq AI", category: "AI", description: "Fast open-source language models for summarising, extracting and classifying.", authType: "api_key", configKey: "api_key", icon: <RobotIcon className="w-5 h-5 text-orange-500" /> },
+  { id: "discord", name: "Discord", category: "Messaging", description: "Connect your account and invite the Orkflo bot to your server.", authType: "oauth", icon: <DiscordIcon className="w-5 h-5 text-[#5865F2]" /> },
+  { id: "github", name: "GitHub", category: "DevTools", description: "React to issues and automate repository workflows.", authType: "oauth", icon: <GithubIcon className="w-5 h-5 text-foreground" /> },
+  { id: "google_sheets", name: "Google Sheets", category: "Database", description: "Read and write rows directly in your spreadsheets.", authType: "oauth", icon: <FileSheetIcon className="w-5 h-5 text-[#0F9D58]" /> },
+  { id: "slack", name: "Slack", category: "Messaging", description: "Post updates to your Slack channels through a webhook.", authType: "webhook", configKey: "webhook_url", icon: <SlackIcon className="w-5 h-5" /> },
+  { id: "notion", name: "Notion", category: "CMS", description: "Create and update database items in your workspace.", authType: "api_key", configKey: "api_key", icon: <div className="w-5 h-5 bg-foreground text-background font-serif font-bold flex items-center justify-center rounded-[4px] text-xs">N</div> },
 ];
 
+const CATEGORIES = ["All", ...Array.from(new Set(AVAILABLE_INTEGRATIONS.map((a) => a.category)))];
+
+/* ---------- small components ---------- */
+
+function Stat({ label, value, hint }) {
+  return (
+    <div className="flex flex-col gap-1 px-4 py-3">
+      <span className="text-[12px] text-muted-foreground">{label}</span>
+      <div className="flex items-baseline gap-2">
+        <span className="text-xl font-semibold tracking-tight text-foreground tabular-nums">{value}</span>
+        {hint && <span className="text-[11px] text-muted-foreground">{hint}</span>}
+      </div>
+    </div>
+  );
+}
+
+function StatusPill({ connected }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 text-[11px] font-medium rounded-full px-2 py-0.5 border ${
+        connected
+          ? "text-emerald-500 bg-emerald-500/10 border-emerald-500/20"
+          : "text-muted-foreground bg-transparent border-border"
+      }`}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-emerald-500" : "bg-muted-foreground/50"}`} />
+      {connected ? "Connected" : "Not connected"}
+    </span>
+  );
+}
+
+function IntegrationCard({ app, connected, usedIn, onOpen }) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); } }}
+      className="group flex flex-col rounded-lg border border-border bg-card hover:border-foreground/30 transition-colors cursor-pointer outline-none focus-visible:ring-1 focus-visible:ring-ring"
+    >
+      <div className="flex items-start justify-between p-4 pb-3">
+        <div className="w-10 h-10 rounded-md border border-border bg-background flex items-center justify-center">
+          {app.icon}
+        </div>
+        <StatusPill connected={connected} />
+      </div>
+
+      <div className="px-4 pb-4 flex flex-col gap-1 flex-1">
+        <div className="flex items-center gap-2">
+          <h3 className="text-[14px] font-medium tracking-tight text-foreground">{app.name}</h3>
+          <span className="text-[11px] text-muted-foreground">{app.category}</span>
+        </div>
+        <p className="text-[12px] text-muted-foreground leading-relaxed line-clamp-2">{app.description}</p>
+      </div>
+
+      <div className="flex items-center justify-between px-4 py-2.5 border-t border-border text-[12px] text-muted-foreground">
+        <span className="font-mono text-[11px]">{AUTH_LABEL[app.authType]}</span>
+        {connected ? (
+          <span>
+            {usedIn.length > 0 ? (
+              <>Used in <span className="text-foreground tabular-nums">{usedIn.length}</span> {usedIn.length === 1 ? "workflow" : "workflows"}</>
+            ) : (
+              "Not used yet"
+            )}
+          </span>
+        ) : (
+          <span className="flex items-center gap-1 text-foreground opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+            Connect <ArrowUpRight className="w-3.5 h-3.5" />
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SkeletonCard() {
+  return (
+    <div className="rounded-lg border border-border bg-card h-[176px] p-4 animate-pulse flex flex-col gap-4">
+      <div className="flex justify-between">
+        <div className="w-10 h-10 rounded-md bg-accent" />
+        <div className="h-5 w-24 rounded-full bg-accent" />
+      </div>
+      <div className="h-3 w-28 rounded bg-accent" />
+      <div className="h-2.5 w-full rounded bg-accent" />
+      <div className="h-2.5 w-2/3 rounded bg-accent" />
+    </div>
+  );
+}
+
+function Toast({ toast }) {
+  if (!toast) return null;
+  const ok = toast.type === "success";
+  return (
+    <div className="fixed bottom-5 right-5 z-[60] animate-in slide-in-from-bottom-2 fade-in duration-200">
+      <div className="flex items-center gap-2.5 rounded-md border border-border bg-background px-3.5 py-2.5 shadow-lg text-[13px] text-foreground">
+        {ok ? <CircleCheck className="w-4 h-4 text-emerald-500" /> : <CircleAlert className="w-4 h-4 text-destructive" />}
+        {toast.message}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- page ---------- */
+
 export default function IntegrationsVault() {
+  const navigate = useNavigate();
+  const searchRef = useRef(null);
+
   const [connections, setConnections] = useState({});
-  const [activeModal, setActiveModal] = useState(null);
-  const [inputValue, setInputValue] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [workflows, setWorkflows] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch saved credentials on load
+  const [searchQuery, setSearchQuery] = useState("");
+  const [tab, setTab] = useState("all");
+  const [category, setCategory] = useState("All");
+
+  const [activeId, setActiveId] = useState(null);
+  const [inputValue, setInputValue] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const activeApp = AVAILABLE_INTEGRATIONS.find((a) => a.id === activeId) || null;
+
+  const notify = useCallback((message, type = "success") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  }, []);
+
+  const loadCredentials = useCallback(() => {
+    return getCredentials().then((saved) => {
+      const map = {};
+      saved.forEach((s) => { map[s] = true; });
+      setConnections((prev) => ({ ...map, ...Object.fromEntries(Object.entries(prev).filter(([k, v]) => v === false && !map[k])) }));
+    });
+  }, []);
+
   useEffect(() => {
-    getCredentials()
-      .then((savedServices) => {
-        const stateMap = {};
-        savedServices.forEach((service) => {
-          stateMap[service] = true;
-        });
-        setConnections(stateMap);
+    Promise.all([getCredentials(), listWorkflows().catch(() => [])])
+      .then(([saved, wfs]) => {
+        const map = {};
+        saved.forEach((s) => { map[s] = true; });
+        setConnections(map);
+        setWorkflows(Array.isArray(wfs) ? wfs : []);
       })
       .finally(() => setLoading(false));
   }, []);
 
-  const handleSaveAPIKey = async () => {
+  // Refresh when returning from an OAuth tab / redirect
+  useEffect(() => {
+    const onFocus = () => { loadCredentials().catch(() => {}); };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [loadCredentials]);
+
+  // "/" focuses search, Escape closes the modal
+  useEffect(() => {
+    const onKey = (e) => {
+      const tag = e.target.tagName;
+      if (e.key === "/" && tag !== "INPUT" && tag !== "TEXTAREA") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+      if (e.key === "Escape") closeModal();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const usage = useMemo(() => {
+    const map = {};
+    workflows.forEach((wf) => {
+      const keys = new Set((wf.steps || []).map((s) => s.action_key).filter(Boolean));
+      keys.forEach((k) => { (map[k] = map[k] || []).push({ id: wf.id, name: wf.name }); });
+    });
+    return map;
+  }, [workflows]);
+
+  const connectedCount = AVAILABLE_INTEGRATIONS.filter((a) => connections[a.id]).length;
+  const workflowsUsing = new Set(
+    AVAILABLE_INTEGRATIONS.filter((a) => connections[a.id]).flatMap((a) => (usage[a.id] || []).map((w) => w.id))
+  ).size;
+
+  const visible = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return AVAILABLE_INTEGRATIONS.filter((a) => {
+      const connected = !!connections[a.id];
+      if (tab === "connected" && !connected) return false;
+      if (tab === "available" && connected) return false;
+      if (category !== "All" && a.category !== category) return false;
+      if (!q) return true;
+      return a.name.toLowerCase().includes(q) || a.category.toLowerCase().includes(q) || a.description.toLowerCase().includes(q);
+    });
+  }, [connections, tab, category, searchQuery]);
+
+  const TABS = [
+    { key: "all", label: "All", n: AVAILABLE_INTEGRATIONS.length },
+    { key: "connected", label: "Connected", n: connectedCount },
+    { key: "available", label: "Available", n: AVAILABLE_INTEGRATIONS.length - connectedCount },
+  ];
+
+  function openModal(app) {
+    setActiveId(app.id);
+    setInputValue("");
+    setConfirmDisconnect(false);
+  }
+  function closeModal() {
+    setActiveId(null);
+    setInputValue("");
+    setConfirmDisconnect(false);
+  }
+
+  const handleSaveCredential = async () => {
+    if (!activeApp) return;
     setSaving(true);
     try {
-      await saveCredential(activeModal.id, { [activeModal.configKey]: inputValue });
-      setConnections(prev => ({ ...prev, [activeModal.id]: true }));
-      setActiveModal(null);
-      setInputValue("");
-    } catch (err) {
-      alert("Failed to save credential securely.");
+      await saveCredential(activeApp.id, { [activeApp.configKey]: inputValue.trim() });
+      setConnections((prev) => ({ ...prev, [activeApp.id]: true }));
+      notify(`${activeApp.name} credential saved`);
+      closeModal();
+    } catch {
+      notify("Couldn't save the credential. Try again.", "error");
     } finally {
       setSaving(false);
     }
@@ -119,206 +266,271 @@ export default function IntegrationsVault() {
 
   const handleOAuthRedirect = (providerId) => {
     const config = OAUTH_CONFIG[providerId];
-    if (!config || !config.clientId) {
-      alert(`Client ID for ${providerId} is missing in your environment variables.`);
-      return;
-    }
-
-    // We use a different callback route so we don't accidentally log the user out
-    // when they are just trying to connect an integration.
+    if (!config?.clientId) return;
     const redirectUri = encodeURIComponent(`${window.location.origin}/integrations/callback/${providerId}`);
     const state = crypto.randomUUID();
     sessionStorage.setItem("integration_oauth_state", state);
-
     let url = `${config.authUrl}?client_id=${config.clientId}&redirect_uri=${redirectUri}&response_type=code&state=${state}&scope=${encodeURIComponent(config.scope)}`;
-
-    // Google requires extra params to return a refresh token for background tasks
-    if (providerId === "google_sheets") {
-      url += "&access_type=offline&prompt=consent";
-    }
-
+    if (providerId === "google_sheets") url += "&access_type=offline&prompt=consent";
     window.location.href = url;
   };
 
-  const handleDisconnect = async (id) => {
-    if(window.confirm("Disconnect this service? Active workflows may fail.")) {
-      try {
-        setConnections(prev => ({ ...prev, [id]: false }));
-      } catch (err) {
-        alert("Could not disconnect service.");
-      }
-    }
+  const handleDisconnect = () => {
+    if (!activeApp) return;
+    // UI-only for now: wire this to a delete-credential endpoint when available.
+    setConnections((prev) => ({ ...prev, [activeApp.id]: false }));
+    notify(`${activeApp.name} disconnected`);
+    closeModal();
   };
 
-  if (loading) return <div className="p-10 text-center text-zinc-500 font-medium animate-pulse">Loading secure vault...</div>;
+  const activeConnected = activeApp ? !!connections[activeApp.id] : false;
+  const activeUsage = activeApp ? usage[activeApp.id] || [] : [];
+  const oauthMissing = activeApp?.authType === "oauth" && !OAUTH_CONFIG[activeApp.id]?.clientId;
 
   return (
-    <div className="h-full overflow-y-auto px-4 sm:px-10 py-6 sm:py-8 space-y-6 sm:space-y-8 custom-scrollbar bg-[#060607]">
-      <div className="max-w-5xl mx-auto flex flex-col gap-8">
+    <div className="h-full overflow-y-auto px-4 py-6 sm:px-6 md:px-8 bg-background custom-scrollbar">
+      <div className="max-w-[1200px] mx-auto flex flex-col gap-6 pb-20">
 
-        {/* Section Header */}
-        <div className="pt-2">
-          <h1 className="text-3xl font-serif text-zinc-100 tracking-tight">
-            Available Integrations
-          </h1>
-          <p className="text-sm text-zinc-400 mt-2 font-medium">Manage and connect all your third-party applications in one secure place.</p>
+        {/* Header */}
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Integrations Vault</h1>
+          <p className="text-[13px] text-muted-foreground max-w-[60ch]">
+            Connect an app once. Your workflows use the stored connection, so keys never sit inside a workflow step.
+          </p>
         </div>
 
-        {/* Toolbar: Tabs and Search Filter */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-zinc-800/80 pb-4 gap-4">
-          <div className="flex items-center gap-6">
-            <div className="relative flex items-center gap-2 pb-4 pt-1">
-              <span className="text-sm font-semibold text-zinc-100">Integrations</span>
-              <span className="px-2 py-0.5 text-[11px] font-mono font-bold rounded-md bg-zinc-800/80 border border-zinc-700/50 text-zinc-300">
-                {AVAILABLE_INTEGRATIONS.length}
-              </span>
-              <span className="absolute bottom-0 left-0 w-full h-[2px] bg-zinc-100 rounded-t-md"></span>
+        {/* Overview */}
+        <div className="grid grid-cols-3 rounded-lg border border-border bg-card divide-x divide-border">
+          <Stat label="Connected" value={`${connectedCount}/${AVAILABLE_INTEGRATIONS.length}`} />
+          <Stat label="Workflows using the vault" value={workflowsUsing} />
+          <Stat
+            label="Needs attention"
+            value={AVAILABLE_INTEGRATIONS.filter((a) => !connections[a.id] && (usage[a.id] || []).length > 0).length}
+            hint="used but not connected"
+          />
+        </div>
+
+        {/* Toolbar */}
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="relative w-full sm:max-w-[360px] group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-foreground transition-colors" />
+              <Input
+                ref={searchRef}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search integrations"
+                className="pl-9 h-9 bg-background border-border text-[13px]"
+              />
+              <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 hidden sm:block text-[10px] font-mono text-muted-foreground bg-accent border border-border rounded px-1.5">/</kbd>
+            </div>
+
+            <div className="inline-flex items-center rounded-md border border-border p-0.5 bg-background w-fit">
+              {TABS.map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setTab(t.key)}
+                  className={`h-7 px-2.5 rounded text-[12px] font-medium transition-colors flex items-center gap-1.5 ${
+                    tab === t.key ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {t.label}
+                  <span className="font-mono text-[10px] text-muted-foreground tabular-nums">{t.n}</span>
+                </button>
+              ))}
             </div>
           </div>
-          <div className="relative w-full sm:w-72">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-500">
-              <Search className="w-4 h-4" />
-            </div>
-            <input
-              className="w-full pl-9 pr-4 py-2 text-sm bg-zinc-900/50 border border-zinc-800 hover:border-zinc-700 focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600 rounded-lg text-zinc-100 placeholder-zinc-500 outline-none transition-all shadow-sm"
-              placeholder="Search integrations..."
-              type="text"
-            />
+
+          <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-1">
+            {CATEGORIES.map((c) => (
+              <button
+                key={c}
+                onClick={() => setCategory(c)}
+                className={`h-7 px-3 rounded-full border text-[12px] whitespace-nowrap transition-colors ${
+                  category === c
+                    ? "border-foreground bg-foreground text-background font-medium"
+                    : "border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/50"
+                }`}
+              >
+                {c}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Integrations List (Shadcn Style Cards) */}
-        <div className="grid gap-3 pb-12">
-          {AVAILABLE_INTEGRATIONS.map((app) => {
-            const isConnected = connections[app.id];
-
-            return (
-              <div key={app.id} className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-[#09090b] border border-zinc-800/80 hover:border-zinc-700/80 transition-all shadow-sm gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center flex-shrink-0 shadow-inner group-hover:bg-zinc-800/50 transition-colors">
-                    {app.icon}
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold text-zinc-100 tracking-tight">{app.name}</h3>
-                    <p className="text-[13px] text-zinc-400 font-medium mt-0.5">
-                      {app.description}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 mt-2 sm:mt-0 pt-3 sm:pt-0 border-t border-zinc-800/50 sm:border-0">
-                  {isConnected ? (
-                    <>
-                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold select-none">
-                        <ShieldCheck className="w-3.5 h-3.5" />
-                        Connected
-                      </div>
-                      <button
-                        onClick={() => setActiveModal(app)}
-                        className="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-zinc-100 text-xs font-semibold transition-colors shadow-sm"
-                      >
-                        Configure
-                      </button>
-                      <button
-                        onClick={() => handleDisconnect(app.id)}
-                        className="px-3 py-1.5 rounded-md bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-semibold transition-colors"
-                      >
-                        Disconnect
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button className="hidden sm:inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 font-medium transition-colors mr-2 group/link">
-                        Learn more
-                        <ChevronRight className="w-3 h-3 group-hover/link:translate-x-0.5 transition-transform" />
-                      </button>
-                      <button
-                        onClick={() => setActiveModal(app)}
-                        className="px-4 py-1.5 rounded-md bg-zinc-100 hover:bg-white text-zinc-900 text-xs font-bold transition-all shadow-[0_0_10px_rgba(255,255,255,0.1)] hover:shadow-[0_0_15px_rgba(255,255,255,0.2)]"
-                      >
-                        Connect
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        {/* Grid */}
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+          </div>
+        ) : visible.length === 0 ? (
+          <div className="flex flex-col items-center justify-center text-center gap-3 rounded-lg border border-dashed border-border py-20 px-6">
+            <div className="w-10 h-10 rounded-md border border-border bg-card flex items-center justify-center">
+              <Plug className="w-5 h-5 text-muted-foreground" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <p className="text-[14px] font-medium text-foreground">
+                {tab === "connected" && connectedCount === 0 ? "Nothing connected yet" : "No integrations match"}
+              </p>
+              <p className="text-[13px] text-muted-foreground max-w-[38ch]">
+                {tab === "connected" && connectedCount === 0
+                  ? "Connect an app and it will show up here."
+                  : "Try a different search, category or tab."}
+              </p>
+            </div>
+            {(tab !== "all" || category !== "All" || searchQuery) && (
+              <Button
+                variant="outline"
+                className="h-8 text-[12px] mt-1"
+                onClick={() => { setTab("all"); setCategory("All"); setSearchQuery(""); }}
+              >
+                Clear filters
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {visible.map((app) => (
+              <IntegrationCard
+                key={app.id}
+                app={app}
+                connected={!!connections[app.id]}
+                usedIn={usage[app.id] || []}
+                onOpen={() => openModal(app)}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Connection Modal (Shadcn Dialog Style) */}
-      {activeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-[#09090b] border border-zinc-800 rounded-xl p-6 w-full max-w-md shadow-2xl flex flex-col gap-6 animate-in zoom-in-95 duration-200">
-
-            <div className="flex justify-between items-start">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center shadow-inner">
-                  {activeModal.icon}
+      {/* Modal */}
+      {activeApp && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150"
+          onClick={closeModal}
+        >
+          <div
+            className="w-full max-w-md rounded-lg border border-border bg-background shadow-2xl flex flex-col animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 p-5 pb-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 shrink-0 rounded-md border border-border bg-card flex items-center justify-center">
+                  {activeApp.icon}
                 </div>
-                <div>
-                  <h3 className="text-lg font-normal text-zinc-100 tracking-tight">
-                    {connections[activeModal.id] ? "Manage" : "Connect"} {activeModal.name}
+                <div className="min-w-0">
+                  <h3 className="text-[15px] font-semibold tracking-tight text-foreground truncate">
+                    {activeConnected ? "Manage" : "Connect"} {activeApp.name}
                   </h3>
-                  <p className="text-xs text-zinc-400 font-medium">{activeModal.authType === 'oauth' ? 'OAuth 2.0 Authorization' : 'Secure Credential Storage'}</p>
-                </div>
-              </div>
-              <button onClick={() => {setActiveModal(null); setInputValue("");}} className="text-zinc-500 hover:text-zinc-300 transition-colors p-1 rounded-md hover:bg-zinc-800">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {activeModal.authType === "oauth" ? (
-              <div className="flex flex-col gap-5">
-                <div className="bg-zinc-900/50 border border-zinc-800/80 rounded-lg p-4 text-sm text-zinc-300 leading-relaxed font-medium">
-                  You will be securely redirected to {activeModal.name} to grant Orkflo permission to access your account.
-                </div>
-                <button
-                  onClick={() => handleOAuthRedirect(activeModal.id)}
-                  className="w-full bg-zinc-100 hover:bg-white text-zinc-900 text-sm font-bold py-2.5 rounded-md transition-colors shadow-sm flex items-center justify-center gap-2"
-                >
-                  <Link2 className="w-4 h-4" />
-                  Authenticate with {activeModal.name}
-                </button>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-5">
-                <div className="flex flex-col gap-2.5">
-                  <label className="text-xs font-bold text-zinc-300 tracking-wide flex items-center gap-1.5">
-                    <Key className="w-3.5 h-3.5 text-zinc-500" />
-                    {activeModal.authType === "api_key" ? "API Key" : "Webhook URL"}
-                  </label>
-                  <input
-                    type="password"
-                    autoFocus
-                    placeholder={connections[activeModal.id] ? "Paste a new credential to overwrite..." : `Paste your ${activeModal.name} credential here...`}
-                    className="w-full bg-zinc-900/50 border border-zinc-800 focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600 rounded-md px-3 py-2.5 text-sm text-zinc-100 outline-none transition-all shadow-inner placeholder:text-zinc-600 font-mono"
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                  />
-                  <p className="text-[11px] text-zinc-500 font-medium flex items-center gap-1 mt-1">
-                    <ShieldCheck className="w-3 h-3" />
-                    Encrypted at rest using AES-256. Never shared.
+                  <p className="text-[12px] text-muted-foreground font-mono">
+                    {activeApp.authType === "oauth" ? "OAuth 2.0" : "Stored credential"}
                   </p>
                 </div>
-                <button
-                  onClick={handleSaveAPIKey}
-                  disabled={!inputValue.trim() || saving}
-                  className="w-full bg-zinc-100 hover:bg-white text-zinc-900 text-sm font-bold py-2.5 rounded-md transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {saving ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-zinc-900/30 border-t-zinc-900 rounded-full animate-spin"></div>
-                      Encrypting...
-                    </>
-                  ) : "Save Credential"}
-                </button>
               </div>
-            )}
+              <Button variant="ghost" size="icon" className="w-8 h-8 -mr-2 -mt-1 text-muted-foreground hover:text-foreground" onClick={closeModal}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+
+            <div className="px-5 pb-5 flex flex-col gap-5">
+              {activeConnected && (
+                <div className="flex items-center justify-between rounded-md border border-border bg-card px-3 py-2.5">
+                  <StatusPill connected />
+                  <span className="text-[12px] text-muted-foreground">
+                    {activeUsage.length === 0 ? "Not used in any workflow" : `Used in ${activeUsage.length} ${activeUsage.length === 1 ? "workflow" : "workflows"}`}
+                  </span>
+                </div>
+              )}
+
+              {activeConnected && activeUsage.length > 0 && (
+                <div className="flex flex-col rounded-md border border-border divide-y divide-border max-h-40 overflow-y-auto custom-scrollbar">
+                  {activeUsage.map((w) => (
+                    <button
+                      key={w.id}
+                      onClick={() => navigate(`/workflows/${w.id}`)}
+                      className="flex items-center justify-between px-3 py-2 text-left text-[13px] text-foreground hover:bg-accent transition-colors"
+                    >
+                      <span className="truncate">{w.name}</span>
+                      <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {activeApp.authType === "oauth" ? (
+                <div className="flex flex-col gap-3">
+                  <p className="text-[13px] text-muted-foreground leading-relaxed">
+                    {activeConnected
+                      ? `Re-authenticate to refresh permissions or switch the ${activeApp.name} account Orkflo uses.`
+                      : `You'll be redirected to ${activeApp.name} to give Orkflo access to your account.`}
+                  </p>
+                  {oauthMissing && (
+                    <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-[12px] text-amber-500">
+                      <AlertTriangle className="w-4 h-4 shrink-0 mt-px" />
+                      <span>
+                        Missing client ID for {activeApp.name}. Set <span className="font-mono">VITE_{activeApp.id.toUpperCase()}_CLIENT_ID</span> in your environment.
+                      </span>
+                    </div>
+                  )}
+                  <Button onClick={() => handleOAuthRedirect(activeApp.id)} disabled={oauthMissing} className="w-full h-9 gap-2 text-[13px] font-medium">
+                    <Link2 className="w-4 h-4" /> {activeConnected ? "Re-authenticate" : `Authenticate with ${activeApp.name}`}
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  <label className="text-[12px] font-medium text-foreground flex items-center gap-1.5">
+                    <Key className="w-3.5 h-3.5 text-muted-foreground" />
+                    {activeApp.authType === "api_key" ? "API key" : "Webhook URL"}
+                  </label>
+                  <Input
+                    type="password"
+                    autoFocus
+                    autoComplete="new-password"
+                    placeholder={activeConnected ? "Paste a new value to replace the saved one" : `Paste your ${activeApp.name} ${activeApp.authType === "api_key" ? "API key" : "webhook URL"}`}
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && inputValue.trim() && !saving) handleSaveCredential(); }}
+                    className="font-mono bg-background border-border text-[13px] h-9"
+                  />
+                  <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5" /> Stored encrypted. The saved value is never shown again.
+                  </p>
+                  <Button onClick={handleSaveCredential} disabled={!inputValue.trim() || saving} className="w-full h-9 gap-2 text-[13px] font-medium">
+                    {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving</> : <><Check className="w-4 h-4" /> {activeConnected ? "Replace credential" : "Save credential"}</>}
+                  </Button>
+                </div>
+              )}
+
+              {activeConnected && (
+                <div className="pt-4 border-t border-border">
+                  {!confirmDisconnect ? (
+                    <button
+                      onClick={() => setConfirmDisconnect(true)}
+                      className="text-[12px] text-destructive hover:underline underline-offset-4"
+                    >
+                      Disconnect {activeApp.name}
+                    </button>
+                  ) : (
+                    <div className="flex flex-col gap-3 rounded-md border border-destructive/30 bg-destructive/10 p-3">
+                      <p className="text-[12px] text-foreground leading-relaxed">
+                        {activeUsage.length > 0
+                          ? `${activeUsage.length} ${activeUsage.length === 1 ? "workflow uses" : "workflows use"} ${activeApp.name}. They will fail until you reconnect.`
+                          : `Disconnect ${activeApp.name}?`}
+                      </p>
+                      <div className="flex justify-end gap-2">
+                        <Button variant="ghost" className="h-8 text-[12px]" onClick={() => setConfirmDisconnect(false)}>Cancel</Button>
+                        <Button variant="destructive" className="h-8 text-[12px]" onClick={handleDisconnect}>Disconnect</Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
+
+      <Toast toast={toast} />
     </div>
   );
 }
