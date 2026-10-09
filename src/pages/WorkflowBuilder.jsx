@@ -561,10 +561,10 @@ export default function WorkflowBuilder() {
     : <WorkflowIcon className="w-4 h-4 text-muted-foreground" />;
 
   return (
-    <>
-      <div className="flex flex-1 w-full relative overflow-hidden h-full min-h-0">
+      <>
+        <div className="flex flex-1 w-full relative overflow-hidden h-[calc(100dvh-64px)] min-h-0">
 
-        {/* Mobile backdrop */}
+          {/* Mobile backdrop */}
         {isSidebarOpen && (
           <div className="md:hidden absolute inset-0 z-10 bg-black/50 animate-in fade-in duration-200" onClick={() => setIsSidebarOpen(false)} />
         )}
