@@ -34,3 +34,24 @@ export const fetchTriggerSchema = async (actionKey, appEvent, config) => {
          throw error;
     }
 };
+
+
+export const getNotifications = async (unreadOnly = false) => {
+  const { data } = await api.get(`/notifications/${unreadOnly ? "?unread=1" : ""}`);
+  return data;
+};
+
+export const getUnreadCount = async () => {
+  const { data } = await api.get("/notifications/unread-count/");
+  return data.unread_count;
+};
+
+export const markNotificationRead = async (id) => {
+  const { data } = await api.post(`/notifications/${id}/read/`);
+  return data;
+};
+
+export const markAllNotificationsRead = async () => {
+  const { data } = await api.post("/notifications/read-all/");
+  return data;
+};

@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import Logo from "../assets/orkflo.jpeg";
 import { getUsage, listWorkflows } from "../api/workflows";
 import { DashboardIcon, BlocksIcon, NetworkIcon, IndianRupeeIcon } from "../components/icons";
-import { ChevronsUpDown, Search, ChevronLeft, PanelLeft, Activity, Hexagon, CornerDownLeft } from "lucide-react";
+import { ChevronsUpDown, Search, Activity, Hexagon, CornerDownLeft } from "lucide-react";
 import { Badge } from "./ui/badge";
 
 /* ---------- nav config ---------- */
@@ -174,7 +174,21 @@ export default function Sidebar() {
 
   useEffect(() => {
     window.addEventListener("focus", loadUsage);
-    return () => window.removeEventListener("focus", loadUsage);
+
+    // Listen for toggle event from TopNav
+    const handleToggle = (e) => {
+      if (e.detail?.mobile) {
+        setMobileOpen(prev => !prev);
+      } else {
+        setCollapsed(prev => !prev);
+      }
+    };
+    window.addEventListener("toggleSidebar", handleToggle);
+
+    return () => {
+      window.removeEventListener("focus", loadUsage);
+      window.removeEventListener("toggleSidebar", handleToggle);
+    };
   }, [loadUsage]);
 
   useEffect(() => {
@@ -216,16 +230,6 @@ export default function Sidebar() {
 
   return (
     <>
-      {!mobileOpen && (
-        <button
-          onClick={() => setMobileOpen(true)}
-          aria-label="Open sidebar"
-          className="md:hidden fixed top-2.5 left-4 z-[60] w-9 h-9 flex items-center justify-center bg-background border border-border rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors active:scale-95"
-        >
-          <PanelLeft className="w-[18px] h-[18px]" />
-        </button>
-      )}
-
       {mobileOpen && (
         <div
           className="md:hidden fixed inset-0 bg-background/80 z-[40] backdrop-blur-sm animate-in fade-in"
@@ -238,14 +242,6 @@ export default function Sidebar() {
           mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         }`}
       >
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="hidden md:flex absolute -right-3 top-4 w-6 h-6 bg-background border border-border rounded-full items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent z-50 transition-colors"
-        >
-          <ChevronLeft className={`w-3.5 h-3.5 transition-transform duration-300 ${isCollapsed ? "rotate-180" : ""}`} />
-        </button>
-
         {/* Workspace */}
         <div className={`h-14 flex items-center ${isCollapsed ? "justify-center px-0" : "px-3"} mt-2`}>
           <Link

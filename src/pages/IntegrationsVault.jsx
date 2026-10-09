@@ -302,7 +302,7 @@ export default function IntegrationsVault() {
         {/* Overview */}
         <div className="grid grid-cols-3 rounded-lg border border-border bg-card divide-x divide-border">
           <Stat label="Connected" value={`${connectedCount}/${AVAILABLE_INTEGRATIONS.length}`} />
-          <Stat label="Workflows using the vault" value={workflowsUsing} />
+          <Stat label="Workflows using Vault" value={workflowsUsing} />
           <Stat
             label="Needs attention"
             value={AVAILABLE_INTEGRATIONS.filter((a) => !connections[a.id] && (usage[a.id] || []).length > 0).length}

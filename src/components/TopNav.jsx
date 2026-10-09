@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import { Bell, ChevronRight, CreditCard, Plug, Activity, LogOut } from "lucide-react";
+import { Bell, ChevronRight, CreditCard, Plug, Activity, LogOut, PanelLeft, Inbox } from "lucide-react";
 
 const PAGES = [
   { prefix: "/webhooks", title: "Workflows" },
@@ -20,6 +20,7 @@ const PAGES = [
   { prefix: "/history", title: "Executions" },
   { prefix: "/integrations", title: "Integrations Vault" },
   { prefix: "/billing", title: "Billing & Usage" },
+  { prefix: "/notifications", title: "Notifications" },
 ];
 
 export default function TopNav() {
@@ -52,39 +53,55 @@ export default function TopNav() {
 
   const openNotifications = () => {
     clearUnread();
-    navigate("/history");
+    // FIXED: Now routes to /notifications instead of /history
+    navigate("/notifications");
+  };
+
+  const handleToggleSidebar = () => {
+    const isMobile = window.innerWidth < 768;
+    window.dispatchEvent(new CustomEvent("toggleSidebar", { detail: { mobile: isMobile } }));
   };
 
   return (
-    <header className="h-14 border-b border-border bg-background flex items-center justify-between gap-4 px-4 md:px-6 shrink-0 z-10 sticky top-0 w-full">
-      {/* Breadcrumbs */}
-      <nav aria-label="Breadcrumb" className="flex-1 min-w-0 pl-10 md:pl-0">
-        <ol className="flex items-center gap-1.5 text-[14px] tracking-tight min-w-0">
-          {crumbs.map((c, i) => {
-            const last = i === crumbs.length - 1;
-            return (
-              <li key={i} className="flex items-center gap-1.5 min-w-0">
-                {i > 0 && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />}
-                {c.to && !last ? (
-                  <Link to={c.to} className="text-muted-foreground hover:text-foreground transition-colors">
-                    {c.label}
-                  </Link>
-                ) : (
-                  <span aria-current={last ? "page" : undefined} className="font-medium text-foreground truncate">
-                    {c.label}
-                  </span>
-                )}
-              </li>
-            );
-          })}
-        </ol>
-      </nav>
+    <header className="h-14 border-b border-border bg-background flex items-center justify-between gap-4 px-4 shrink-0 z-10 sticky top-0 w-full">
+      {/* Sidebar Toggle & Breadcrumbs */}
+      <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0 pr-2">
+        <button
+          onClick={handleToggleSidebar}
+          aria-label="Toggle Sidebar"
+          className="w-8 h-8 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors shrink-0"
+        >
+          <PanelLeft className="w-[18px] h-[18px]" />
+        </button>
+
+        <nav aria-label="Breadcrumb" className="min-w-0">
+          <ol className="flex items-center gap-1.5 text-[13px] sm:text-[14px] tracking-tight min-w-0">
+            {crumbs.map((c, i) => {
+              const last = i === crumbs.length - 1;
+              return (
+                <li key={i} className="flex items-center gap-1.5 min-w-0">
+                  {i > 0 && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />}
+                  {c.to && !last ? (
+                    <Link to={c.to} className="text-muted-foreground hover:text-foreground transition-colors shrink-0">
+                      {c.label}
+                    </Link>
+                  ) : (
+                    <span aria-current={last ? "page" : undefined} className="font-medium text-foreground truncate">
+                      {c.label}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
+      </div>
 
       {/* Actions */}
       <div className="flex items-center gap-2 shrink-0">
         <button
           onClick={openNotifications}
-          title={unreadCount > 0 ? `${unreadCount} new ${unreadCount === 1 ? "run" : "runs"}` : "Executions"}
+          title={unreadCount > 0 ? `${unreadCount} new notifications` : "Notifications"}
           aria-label="Notifications"
           className="relative w-8 h-8 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
         >
@@ -112,6 +129,10 @@ export default function TopNav() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            {/* Added Notifications to Dropdown */}
+            <DropdownMenuItem className="cursor-pointer" onClick={() => navigate("/notifications")}>
+              <Inbox className="w-4 h-4 mr-2" /> Notifications
+            </DropdownMenuItem>
             <DropdownMenuItem className="cursor-pointer" onClick={() => navigate("/history")}>
               <Activity className="w-4 h-4 mr-2" /> Executions
             </DropdownMenuItem>

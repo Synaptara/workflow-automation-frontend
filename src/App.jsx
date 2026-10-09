@@ -14,10 +14,11 @@ import TemplateGallery from "./pages/TemplateGallery";
 import AuthCallback from "./pages/AuthCallback";
 import IntegrationCallback from "./pages/IntegrationCallback";
 import Billing from "./pages/Billing";
+import Notifications from "./pages/Notifications";
 
 function Shell({ children }) {
   return (
-    <div className="flex h-screen w-full bg-canvas overflow-hidden">
+    <div className="flex h-screen w-full bg-background overflow-hidden">
       <Sidebar />
       <div className="flex flex-col flex-1 min-w-0">
         <TopNav />
@@ -121,6 +122,16 @@ export default function App() {
               <ProtectedRoute>
                 <Shell>
                   <Billing />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/notifications"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <Notifications />
                 </Shell>
               </ProtectedRoute>
             }

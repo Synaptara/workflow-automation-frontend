@@ -39,53 +39,53 @@ export default function TemplateGallery() {
   );
 
   return (
-    <div className="h-full overflow-y-auto px-4 py-6 sm:px-6 md:px-8 bg-background custom-scrollbar">
-      <div className="max-w-[1200px] mx-auto flex flex-col gap-8 pb-20">
+    <div className="flex-1 h-full overflow-y-auto px-4 py-6 sm:px-6 md:px-8 bg-background custom-scrollbar">
+      <div className="max-w-[1200px] mx-auto flex flex-col gap-6 md:gap-8 pb-20">
 
         {/* Section Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Template Gallery</h1>
+            <h1 className="text-xl md:text-2xl font-semibold tracking-tight text-foreground">Template Gallery</h1>
             <p className="text-[13px] text-muted-foreground mt-1">Start automating in seconds with pre-built workflow templates.</p>
           </div>
         </div>
 
         {/* Dynamic State: Show Empty Placeholder OR Grid of Templates */}
         {templates.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 border border-border rounded-xl bg-accent/10 border-dashed mt-4">
-            <div className="w-16 h-16 rounded-2xl bg-accent flex items-center justify-center mb-5 shadow-sm border border-border/50">
-              <LayoutTemplate className="w-8 h-8 text-muted-foreground" />
+          <div className="flex flex-col items-center justify-center py-16 md:py-24 px-4 border border-border rounded-xl bg-accent/10 border-dashed mt-2 md:mt-4 w-full">
+            <div className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-accent flex items-center justify-center mb-4 md:mb-5 shadow-sm border border-border/50">
+              <LayoutTemplate className="w-6 h-6 md:w-8 md:h-8 text-muted-foreground" />
             </div>
-            <h3 className="text-[16px] font-semibold text-foreground tracking-tight mb-2">No templates found</h3>
-            <p className="text-[13px] text-muted-foreground max-w-md text-center leading-relaxed">
+            <h3 className="text-[15px] md:text-[16px] font-semibold text-foreground tracking-tight mb-2 text-center">No templates found</h3>
+            <p className="text-[12px] md:text-[13px] text-muted-foreground max-w-md text-center leading-relaxed">
               We are actively working on building a library of high-quality templates to help you orchestrate your integrations faster. Check back soon!
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {templates.map((tpl) => (
-              <Card key={tpl.id} className="group bg-background border border-border rounded-xl p-5 flex flex-col hover:border-foreground/30 transition-colors shadow-sm min-h-[220px]">
+              <Card key={tpl.id} className="group bg-background border border-border rounded-xl p-5 flex flex-col hover:border-foreground/30 transition-colors shadow-sm min-h-[200px] md:min-h-[220px]">
 
-                <div className="flex items-center gap-4 border-b border-border pb-4 mb-4">
+                <div className="flex items-center gap-3 md:gap-4 border-b border-border pb-4 mb-4">
                   <div
-                    className="w-10 h-10 rounded-md flex items-center justify-center shadow-sm shrink-0 border border-border/50"
+                    className="w-9 h-9 md:w-10 md:h-10 rounded-md flex items-center justify-center shadow-sm shrink-0 border border-border/50"
                     style={{ backgroundColor: tpl.color || 'var(--accent)' }}
                   >
-                    <Zap className="w-5 h-5 text-white" />
+                    <Zap className="w-4 h-4 md:w-5 md:h-5 text-white" />
                   </div>
-                  <h3 className="text-[14px] font-semibold text-foreground tracking-tight line-clamp-2">
+                  <h3 className="text-[13px] md:text-[14px] font-semibold text-foreground tracking-tight line-clamp-2">
                     {tpl.name}
                   </h3>
                 </div>
 
-                <p className="text-[12px] text-muted-foreground leading-relaxed flex-1 line-clamp-3 mb-4">
+                <p className="text-[11px] md:text-[12px] text-muted-foreground leading-relaxed flex-1 line-clamp-3 mb-4">
                   {tpl.description}
                 </p>
 
                 <Button
                   onClick={() => handleUseTemplate(tpl)}
                   disabled={cloning === tpl.id}
-                  className="w-full h-9 font-medium text-[13px] gap-2 mt-auto"
+                  className="w-full h-9 font-medium text-[12px] md:text-[13px] gap-2 mt-auto"
                 >
                   {cloning === tpl.id ? (
                     <><Activity className="w-4 h-4 animate-spin" /> Creating...</>
