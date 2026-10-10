@@ -23,10 +23,11 @@ import {
   RobotIcon
 } from "../components/icons";
 
-import { Play, ExternalLink, HelpCircle, ZoomIn, Maximize, ZoomOut, Lock, Mail, X, RefreshCw, ShieldCheck, LayoutGrid, Plus, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Play, ExternalLink, HelpCircle, ZoomIn, Maximize, ZoomOut, Lock, Mail, X, RefreshCw, ShieldCheck, LayoutGrid, Plus, Loader2, CheckCircle2, AlertCircle, Trash2 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 
 let idCounter = 0;
 const nextId = () => `n${Date.now()}_${idCounter++}`;
@@ -486,15 +487,19 @@ export default function WorkflowBuilder() {
           </div>
 
           {field.type === "select" ? (
-            <select
-              className="bg-background border border-border rounded-md px-3 py-2 text-[13px] text-foreground focus:border-foreground outline-none transition-colors appearance-none cursor-pointer"
+            <Select
               value={selected.data.config[field.key] || (field.options[0]?.value || "")}
-              onChange={(e) => updateSelectedData({ config: { ...selected.data.config, [field.key]: e.target.value } })}
+              onValueChange={(val) => updateSelectedData({ config: { ...selected.data.config, [field.key]: val } })}
             >
-              {field.options.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
+              <SelectTrigger className="w-full bg-background border-border text-[13px] h-9">
+                <SelectValue placeholder={field.placeholder || "Select an option..."} />
+              </SelectTrigger>
+              <SelectContent>
+                {field.options.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           ) : isAuthKey ? (
             <input
               type="password"
@@ -840,23 +845,61 @@ export default function WorkflowBuilder() {
                     <label className="text-[12px] font-medium text-foreground">Field to check</label>
                     <Input
                       className="bg-background border-border text-[13px] h-9"
-                      placeholder="e.g. trigger.budget"
+                      placeholder="e.g. trigger.issue_title"
                       value={selected.data.config.field || ""}
                       onChange={(e) => updateSelectedData({ config: { ...selected.data.config, field: e.target.value } })}
                     />
+                    <div className="flex flex-col gap-2 mt-1 p-3 bg-muted/40 rounded-md border border-border">
+                      <span className={sectionLabel}>Insert Variables</span>
+                      <div className="flex flex-wrap gap-1.5">
+
+                        {/* TRIGGER VARIABLES (Fixed path) */}
+                        {getAvailableVariables().map((key) => (
+                          <button key={`trigger-${key}`} type="button"
+                            onClick={() => {
+                              const currentVal = selected.data.config.field || "";
+                              updateSelectedData({ config: { ...selected.data.config, field: currentVal + `trigger.${key}` } });
+                            }}
+                            className="text-[10px] font-mono bg-background border border-border px-1.5 py-1 rounded hover:border-foreground text-muted-foreground transition-colors"
+                          >+ trigger.{key}</button>
+                        ))}
+
+                        {/* UPSTREAM ACTION VARIABLES (Fixed brackets) */}
+                        {upstreamActions.map((node) => {
+                          const defaultPath = node.data.actionKey === "groq_ai" ? ".reply" : "";
+                          return (
+                            <button key={`upstream-${node.id}`} type="button"
+                              onClick={() => {
+                                const currentVal = selected.data.config.field || "";
+                                updateSelectedData({ config: { ...selected.data.config, field: currentVal + `${node.id}${defaultPath}` } });
+                              }}
+                              className="text-[10px] font-mono bg-background border border-border px-1.5 py-1 rounded hover:border-foreground text-foreground transition-colors"
+                            >+ {INTEGRATIONS[node.data.actionKey]?.name || node.data.actionKey}</button>
+                          );
+                        })}
+
+                        {getAvailableVariables().length === 0 && upstreamActions.length === 0 && (
+                          <span className="text-[11px] text-muted-foreground italic">Click 'Fetch Recent Event' to load variables</span>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   <div className="flex flex-col gap-2">
                     <label className="text-[12px] font-medium text-foreground">Operator</label>
-                    <select
-                      className="bg-background border border-border rounded-md px-3 py-2 text-[13px] text-foreground focus:border-foreground outline-none transition-colors appearance-none cursor-pointer"
+                    <Select
                       value={selected.data.config.operator || "=="}
-                      onChange={(e) => updateSelectedData({ config: { ...selected.data.config, operator: e.target.value } })}
+                      onValueChange={(val) => updateSelectedData({ config: { ...selected.data.config, operator: val } })}
                     >
-                      {["==", "!=", ">", "<", ">=", "<=", "contains"].map((op) => (
-                        <option key={op} value={op}>{op}</option>
-                      ))}
-                    </select>
+                      <SelectTrigger className="w-full bg-background border-border text-[13px] h-9">
+                        <SelectValue placeholder="Select operator" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {["==", "!=", ">", "<", ">=", "<=", "contains"].map((op) => (
+                          <SelectItem key={op} value={op}>{op}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="flex flex-col gap-2">
@@ -947,16 +990,19 @@ export default function WorkflowBuilder() {
                       {INTEGRATIONS[selected.data.actionKey] && (
                         <div className="flex flex-col gap-2 w-full">
                           <label className="text-[12px] font-medium text-foreground">{selected.data.stepType === "trigger" ? "Trigger Event" : "Action Event"}</label>
-                          <select
-                            className="bg-background border border-border rounded-md px-3 py-2 text-[13px] font-medium text-foreground focus:border-foreground outline-none cursor-pointer appearance-none"
+                          <Select
                             value={selected.data.appEvent || ""}
-                            onChange={(e) => updateSelectedData({ appEvent: e.target.value, config: {} })}
+                            onValueChange={(val) => updateSelectedData({ appEvent: val, config: {} })}
                           >
-                            <option value="" disabled>Select an event...</option>
-                            {Object.entries(selected.data.stepType === "trigger" ? INTEGRATIONS[selected.data.actionKey].triggers : INTEGRATIONS[selected.data.actionKey].actions).map(([eventKey, eventConfig]) => (
-                              <option key={eventKey} value={eventKey}>{eventConfig.name}</option>
-                            ))}
-                          </select>
+                            <SelectTrigger className="w-full bg-background border-border text-[13px] h-9 font-medium">
+                              <SelectValue placeholder="Select an event..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Object.entries(selected.data.stepType === "trigger" ? INTEGRATIONS[selected.data.actionKey].triggers : INTEGRATIONS[selected.data.actionKey].actions).map(([eventKey, eventConfig]) => (
+                                <SelectItem key={eventKey} value={eventKey}>{eventConfig.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
                       )}
 
@@ -1011,6 +1057,21 @@ export default function WorkflowBuilder() {
                 </div>
               )}
             </div>
+
+            {/* DELETE MODULE BUTTON */}
+            <div className="pt-4 mt-auto shrink-0 border-t border-border bg-background">
+              <Button
+                variant="destructive"
+                className="w-full h-9 text-[12px] gap-2"
+                onClick={() => {
+                  setNodes((nds) => nds.filter((n) => n.id !== selected.id));
+                  setSelected(null);
+                }}
+              >
+                <Trash2 className="w-4 h-4" /> Delete Module
+              </Button>
+            </div>
+
           </div>
         )}
       </div>

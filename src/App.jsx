@@ -15,6 +15,14 @@ import AuthCallback from "./pages/AuthCallback";
 import IntegrationCallback from "./pages/IntegrationCallback";
 import Billing from "./pages/Billing";
 import Notifications from "./pages/Notifications";
+// import AdminLayout from "./components/admin/AdminLayout";
+// import AdminOverview from "./components/admin/AdminOverview";
+// import AdminUsers from "./components/admin/AdminUsers";
+
+// small stub so the other sidebar links don't render blank
+// const Soon = ({ title }) => (
+//   <div className="text-[13px] text-[#a1a1aa]">{title} is coming soon.</div>
+// );
 
 function Shell({ children }) {
   return (
@@ -136,6 +144,20 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          {/* <Route
+            path="/admin"
+            element={
+              <ProtectedRoute>
+                <AdminLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<AdminOverview />} />
+            <Route path="users" element={<AdminUsers />} />
+            <Route path="workflows" element={<Soon title="Global workflows" />} />
+            <Route path="health" element={<Soon title="System health" />} />
+            <Route path="billing" element={<Soon title="Billing" />} />
+          </Route>*/}
         </Routes>
       </AuthProvider>
     </BrowserRouter>

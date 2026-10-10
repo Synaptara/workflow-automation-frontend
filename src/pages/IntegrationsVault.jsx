@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { getCredentials, saveCredential, listWorkflows } from "../api/workflows";
+import { getCredentials, saveCredential, listWorkflows, deleteCredential } from "../api/workflows";
 import { DiscordIcon, RobotIcon, SlackIcon, GithubIcon, FileSheetIcon } from "../components/icons";
 import { Search, X, Link2, Key, ShieldCheck, Check, AlertTriangle, ArrowUpRight, Loader2, Plug, CircleCheck, CircleAlert } from "lucide-react";
 import { Button } from "../components/ui/button";
@@ -275,13 +275,22 @@ export default function IntegrationsVault() {
     window.location.href = url;
   };
 
-  const handleDisconnect = () => {
-    if (!activeApp) return;
-    // UI-only for now: wire this to a delete-credential endpoint when available.
-    setConnections((prev) => ({ ...prev, [activeApp.id]: false }));
-    notify(`${activeApp.name} disconnected`);
-    closeModal();
-  };
+  const handleDisconnect = async () => {
+      if (!activeApp) return;
+
+      try {
+        // Actually tell the backend to delete the token from the Vault
+        await deleteCredential(activeApp.id);
+
+        // Update the React UI state
+        setConnections((prev) => ({ ...prev, [activeApp.id]: false }));
+        notify(`${activeApp.name} disconnected`);
+        closeModal();
+      } catch (error) {
+        console.error("Failed to disconnect integration:", error);
+        notify(`Failed to disconnect ${activeApp.name}. Try again.`, "error");
+      }
+    };
 
   const activeConnected = activeApp ? !!connections[activeApp.id] : false;
   const activeUsage = activeApp ? usage[activeApp.id] || [] : [];
