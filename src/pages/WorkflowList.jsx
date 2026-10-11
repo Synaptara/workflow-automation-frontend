@@ -254,6 +254,7 @@ export default function WorkflowList() {
   const [inputValue, setInputValue] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState("");
+  const [now] = useState(() => Date.now());
 
   useEffect(() => {
     Promise.all([listWorkflows(), getGlobalHistory().catch(() => [])])
@@ -287,7 +288,7 @@ export default function WorkflowList() {
 
   const stats = useMemo(() => {
     const active = workflows.filter((w) => w.is_active !== false).length;
-    const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    const dayAgo = now - 24 * 60 * 60 * 1000;
     const runs24 = history.filter((r) => new Date(r.started_at).getTime() > dayAgo).length;
     const done = history.filter((r) => ["success", "failed"].includes(String(r.status).toLowerCase()));
     const ok = done.filter((r) => String(r.status).toLowerCase() === "success").length;
@@ -298,7 +299,7 @@ export default function WorkflowList() {
       runs24,
       rate: done.length ? `${Math.round((ok / done.length) * 100)}%` : "—",
     };
-  }, [workflows, history]);
+  }, [workflows, history, now]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();

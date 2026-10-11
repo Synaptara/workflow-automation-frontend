@@ -56,3 +56,5 @@ export const markAllNotificationsRead = async () => {
   const { data } = await api.post("/notifications/read-all/");
   return data;
 };
+
+export const getRun = (id) => api.get(`/runs/${id}/`).then((r) => r.data);

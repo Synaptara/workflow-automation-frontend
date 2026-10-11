@@ -15,22 +15,31 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Singleton promise to prevent duplicate concurrent refresh requests
+let refreshing = null;
+const refresh = () =>
+  (refreshing ??= axios
+    .post(`${API_BASE}/api/auth/refresh/`, {}, { withCredentials: true })
+    .then(({ data }) => {
+      localStorage.setItem("access", data.access);
+      return data.access;
+    })
+    .finally(() => {
+      refreshing = null;
+    }));
+
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const original = error.config;
-    // If the access token expires (401) and we haven't retried yet...
-    if (error.response?.status === 401 && !original._retry) {
+    const isAuthCall = original?.url?.includes("/auth/");
+
+    // If access token expires (401), we haven't retried yet, and it's not an auth route...
+    if (error.response?.status === 401 && !original._retry && !isAuthCall) {
       original._retry = true;
       try {
-        // Send a POST request using the dynamic API_BASE.
-        // The browser automatically attaches the refresh_token cookie!
-        const { data } = await axios.post(`${API_BASE}/api/auth/refresh/`, {}, {
-          withCredentials: true
-        });
-
-        localStorage.setItem("access", data.access);
-        original.headers.Authorization = `Bearer ${data.access}`;
+        const token = await refresh();
+        original.headers.Authorization = `Bearer ${token}`;
         return api(original);
       } catch {
         // If the refresh token is expired or invalid, log them out

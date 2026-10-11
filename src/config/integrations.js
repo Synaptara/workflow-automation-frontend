@@ -103,6 +103,8 @@ export const INTEGRATIONS = {
         fields: [
           { key: "repo_name", label: "Repository Name", type: "text", placeholder: "owner/repo" },
           { key: "branch", label: "Branch", type: "text", placeholder: "main" },
+          { key: "file_path", label: "File path", type: "text", placeholder: "logs/run.txt" },
+          { key: "content", label: "File content", type: "textarea", placeholder: "{{trigger.issue_title}}" },
           { key: "commit_message", label: "Commit Message", type: "text", placeholder: "Automated commit via Orkflo" }
         ]
       }
@@ -118,7 +120,7 @@ export const INTEGRATIONS = {
         fields: [
           { key: "video_url", label: "Source Video File URL (e.g., from Drive)", type: "text", placeholder: "https://..." },
           { key: "title", label: "Video Title", type: "text", placeholder: "Automated Upload: {{trigger.title}}" },
-          { key: "description", label: "Video Description", type: "textarea", placeholder: "Generated via Orkflo automation." },
+          { key: "description", label: "Video Description", type: "textarea", optional: true, placeholder: "Generated via Orkflo automation." },
           { key: "privacy", label: "Privacy Status", type: "select", options: [
             { value: "private", label: "Private" },
             { value: "unlisted", label: "Unlisted" },
@@ -206,7 +208,7 @@ export const INTEGRATIONS = {
           { key: "api_key", label: "Notion API Key", type: "text", placeholder: "secret_..." },
           { key: "database_id", label: "Database ID", type: "text", placeholder: "e.g. 1a2b3c4d..." },
           { key: "title", label: "Page Title", type: "text", placeholder: "New Lead: {{trigger.name}}" },
-          { key: "content", label: "Page Content", type: "textarea", placeholder: "Lead email: {{trigger.email}}" }
+          { key: "content", label: "Page Content", type: "textarea", optional: true, placeholder: "Lead email: {{trigger.email}}" }
         ]
       }
     }
@@ -224,8 +226,8 @@ export const INTEGRATIONS = {
             { value: "PUT", label: "PUT" }, { value: "DELETE", label: "DELETE" }
           ]},
           { key: "url", label: "Endpoint URL", type: "text", placeholder: "https://api.example.com/v1/data" },
-          { key: "headers", label: "Headers (JSON format)", type: "textarea", placeholder: '{"Authorization": "Bearer token", "Content-Type": "application/json"}' },
-          { key: "body", label: "Body (JSON format)", type: "textarea", placeholder: '{"amount": "{{trigger.budget}}"}' }
+          { key: "headers", label: "Headers (JSON format)", type: "textarea", optional: true, placeholder: '{"Authorization": "Bearer token", "Content-Type": "application/json"}' },
+          { key: "body", label: "Body (JSON format)", type: "textarea", optional: true, placeholder: '{"amount": "{{trigger.budget}}"}' }
         ]
       }
     }

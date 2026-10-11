@@ -153,7 +153,7 @@ export default function Register() {
 
           <div className="mb-6 text-center lg:text-left">
             <h2 className="text-xl font-semibold tracking-tight mb-1.5 text-white">
-              Create <span className="font-serif italic">Orkflo</span> account
+              Create <span className="font-normal">Orkflo</span> account
             </h2>
             <p className="text-[13px] text-[#71717a]">
               {step === 1

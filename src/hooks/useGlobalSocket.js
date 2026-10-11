@@ -1,32 +1,36 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { WS_BASE } from "../lib/config";
+import { getUnreadCount } from "../api/workflows";
 
 export function useGlobalSocket() {
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    // We grab the token to authenticate the WebSocket connection
     const token = localStorage.getItem("access");
     if (!token) return;
+    let ws, timer, tries = 0, closed = false;
 
-    // Use ws:// for local HTTP, wss:// for production HTTPS
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/^https?:\/\//, '') : "localhost:8000";
+    const sync = () => getUnreadCount().then(setUnreadCount).catch(() => {});
+    sync();
 
-    // Connect to the global notifications channel
-    const ws = new WebSocket(`${protocol}//${host}/ws/notifications/?token=${token}`);
-
-    ws.onmessage = (e) => {
-      const { event } = JSON.parse(e.data);
-      // Whenever ANY workflow finishes successfully or fails, increment the unread bell
-      if (event === "run_finished") {
-        setUnreadCount((prev) => prev + 1);
-      }
+    const connect = () => {
+      ws = new WebSocket(`${WS_BASE}/ws/notifications/?token=${token}`);
+      ws.onopen = () => { tries = 0; };
+      ws.onmessage = (e) => {
+        try {
+          const { event } = JSON.parse(e.data);
+          if (event === "run_finished" || event === "notification_created") sync();
+        } catch { /* ignore malformed frames */ }
+      };
+      ws.onclose = () => {
+        if (!closed) timer = setTimeout(connect, Math.min(30000, 1000 * 2 ** tries++));
+      };
     };
+    connect();
 
-    return () => ws.close();
+    return () => { closed = true; clearTimeout(timer); ws?.close(); };
   }, []);
 
-  const clearUnread = () => setUnreadCount(0);
-
+  const clearUnread = useCallback(() => setUnreadCount(0), []);
   return { unreadCount, clearUnread };
 }

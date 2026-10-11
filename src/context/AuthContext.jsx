@@ -38,8 +38,8 @@ export function AuthProvider({ children }) {
   };
 
   const logout = () => {
+    api.post("/auth/logout/").catch(() => {}); // clears the refresh cookie
     localStorage.removeItem("access");
-    // REMOVED: localStorage.removeItem("refresh");
     localStorage.removeItem("username");
     setIsAuthenticated(false);
   };

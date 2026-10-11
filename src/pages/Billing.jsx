@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import api from "../api/axios";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
-import { Check, Minus, Sparkles, X, Receipt, RefreshCw, ArrowUpRight } from "lucide-react";
+import { Check, Minus, Sparkles, X, Receipt, RefreshCw } from "lucide-react";
 
 /* ---------- helpers ---------- */
 

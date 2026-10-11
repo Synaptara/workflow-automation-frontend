@@ -126,7 +126,7 @@ export default function Login() {
           </Link>
 
           <div className="mb-6 text-center lg:text-left">
-            <h2 className="text-xl font-semibold tracking-tight mb-1.5 text-white">Log in to <span className="font-serif italic">Orkflo</span></h2>
+            <h2 className="text-xl font-semibold tracking-tight mb-1.5 text-white">Log in to <span className="font-normal ">Orkflo</span></h2>
             <p className="text-[13px] text-[#71717a]">Enter your credentials to access your account.</p>
           </div>
 
