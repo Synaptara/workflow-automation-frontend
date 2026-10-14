@@ -1,17 +1,50 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { listWorkflows, createWorkflow, updateWorkflow, deleteWorkflow, getGlobalHistory } from "../api/workflows";
+import {
+  listWorkflows,
+  createWorkflow,
+  updateWorkflow,
+  deleteWorkflow,
+  getGlobalHistory,
+} from "../api/workflows";
 import { INTEGRATIONS } from "../config/integrations";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "../components/ui/dropdown-menu";
 import {
-  DiscordIcon, GithubIcon, FileSheetIcon, SlackIcon, RobotIcon, GmailIcon, NotionIcon,
-  NetworkIcon, RotateCcwClockIcon, WorkflowIcon,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
+import {
+  DiscordIcon,
+  GithubIcon,
+  FileSheetIcon,
+  SlackIcon,
+  RobotIcon,
+  GmailIcon,
+  NotionIcon,
+  NetworkIcon,
+  RotateCcwClockIcon,
+  WorkflowIcon,
 } from "../components/icons";
-import { Search, Plus, Trash2, Pencil, MoreHorizontal, Copy, Check, Link2, Pause, Play, GitBranch, Workflow as WorkflowEmptyIcon } from "lucide-react";
+import {
+  Search,
+  Plus,
+  Trash2,
+  Pencil,
+  MoreHorizontal,
+  Copy,
+  Check,
+  Link2,
+  Pause,
+  Play,
+  GitBranch,
+  Workflow as WorkflowEmptyIcon,
+} from "lucide-react";
 
 /* ---------- helpers ---------- */
 
@@ -25,7 +58,11 @@ const relTime = (value) => {
   if (h < 24) return `${h}h ago`;
   const d = Math.floor(h / 24);
   if (d < 30) return `${d}d ago`;
-  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return new Date(value).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 };
 
 const ICON_CLS = "w-3.5 h-3.5";
@@ -42,7 +79,10 @@ const INTEGRATION_ICONS = {
   gmail: <GmailIcon className={ICON_CLS} />,
   notion: <NotionIcon className={ICON_CLS} />,
 };
-const iconFor = (key) => INTEGRATION_ICONS[key] || <WorkflowIcon className={`${ICON_CLS} text-muted-foreground`} />;
+const iconFor = (key) =>
+  INTEGRATION_ICONS[key] || (
+    <WorkflowIcon className={`${ICON_CLS} text-muted-foreground`} />
+  );
 
 const RUN_STATE = {
   success: { label: "Succeeded", dot: "bg-emerald-500" },
@@ -57,7 +97,8 @@ function triggerOf(wf) {
 
 function triggerLabel(t) {
   if (!t || !t.action_key) return "No trigger set";
-  if (t.action_key === "schedule") return `Every ${t.config?.interval || 15} min`;
+  if (t.action_key === "schedule")
+    return `Every ${t.config?.interval || 15} min`;
   if (t.action_key === "webhook") return "Incoming webhook";
   const integ = INTEGRATIONS[t.action_key];
   const ev = integ?.triggers?.[t.app_event]?.name;
@@ -81,8 +122,12 @@ function Stat({ label, value, hint }) {
     <div className="flex flex-col gap-1 px-4 py-3">
       <span className="text-[12px] text-muted-foreground">{label}</span>
       <div className="flex items-baseline gap-2">
-        <span className="text-xl font-semibold tracking-tight text-foreground tabular-nums">{value}</span>
-        {hint && <span className="text-[11px] text-muted-foreground">{hint}</span>}
+        <span className="text-xl font-semibold tracking-tight text-foreground tabular-nums">
+          {value}
+        </span>
+        {hint && (
+          <span className="text-[11px] text-muted-foreground">{hint}</span>
+        )}
       </div>
     </div>
   );
@@ -104,13 +149,20 @@ function IdChip({ id }) {
       className="group/id inline-flex items-center gap-1.5 text-[12px] font-mono text-muted-foreground hover:text-foreground transition-colors"
     >
       {short}
-      {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3 opacity-0 group-hover/id:opacity-100 transition-opacity" />}
+      {copied ? (
+        <Check className="w-3 h-3 text-emerald-500" />
+      ) : (
+        <Copy className="w-3 h-3 opacity-0 group-hover/id:opacity-100 transition-opacity" />
+      )}
     </button>
   );
 }
 
 function AppStack({ keys }) {
-  if (keys.length === 0) return <span className="text-[12px] text-muted-foreground">No actions yet</span>;
+  if (keys.length === 0)
+    return (
+      <span className="text-[12px] text-muted-foreground">No actions yet</span>
+    );
   const shown = keys.slice(0, 4);
   const extra = keys.length - shown.length;
   return (
@@ -150,7 +202,9 @@ function WorkflowCard({ wf, lastRun, onOpen, onRename, onDelete, onToggle }) {
             {iconFor(trig?.action_key || "webhook")}
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="text-[14px] font-medium text-foreground tracking-tight truncate">{wf.name}</span>
+            <span className="text-[14px] font-medium text-foreground tracking-tight truncate">
+              {wf.name}
+            </span>
             <IdChip id={wf.id} />
           </div>
         </div>
@@ -166,16 +220,29 @@ function WorkflowCard({ wf, lastRun, onOpen, onRename, onDelete, onToggle }) {
               <MoreHorizontal className="w-4 h-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()} className="w-48 text-[13px]">
+          <DropdownMenuContent
+            align="end"
+            onClick={(e) => e.stopPropagation()}
+            className="w-48 text-[13px]"
+          >
             <DropdownMenuItem onClick={onRename} className="cursor-pointer">
               <Pencil className="w-4 h-4 mr-2" /> Rename
             </DropdownMenuItem>
             <DropdownMenuItem onClick={onToggle} className="cursor-pointer">
-              {active ? <Pause className="w-4 h-4 mr-2" /> : <Play className="w-4 h-4 mr-2" />}
+              {active ? (
+                <Pause className="w-4 h-4 mr-2" />
+              ) : (
+                <Play className="w-4 h-4 mr-2" />
+              )}
               {active ? "Pause workflow" : "Resume workflow"}
             </DropdownMenuItem>
             {wf.webhook_url && (
-              <DropdownMenuItem onClick={() => navigator.clipboard.writeText(`${API_BASE}${wf.webhook_url}`)} className="cursor-pointer">
+              <DropdownMenuItem
+                onClick={() =>
+                  navigator.clipboard.writeText(`${API_BASE}${wf.webhook_url}`)
+                }
+                className="cursor-pointer"
+              >
                 <Link2 className="w-4 h-4 mr-2" /> Copy webhook URL
               </DropdownMenuItem>
             )}
@@ -192,29 +259,41 @@ function WorkflowCard({ wf, lastRun, onOpen, onRename, onDelete, onToggle }) {
       </div>
 
       <div className="px-4 pb-4 flex flex-col gap-3 flex-1">
-        <p className="text-[12px] text-muted-foreground truncate">{triggerLabel(trig)}</p>
+        <p className="text-[12px] text-muted-foreground truncate">
+          {triggerLabel(trig)}
+        </p>
         <div className="flex items-center justify-between">
           <AppStack keys={appKeys(wf)} />
           {!active && (
-            <span className="text-[10px] font-mono text-muted-foreground border border-border rounded px-1.5 py-0.5">Paused</span>
+            <span className="text-[10px] font-mono text-muted-foreground border border-border rounded px-1.5 py-0.5">
+              Paused
+            </span>
           )}
         </div>
       </div>
 
       <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-t border-border text-[12px] text-muted-foreground">
         <div className="flex items-center gap-2 min-w-0">
-          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${run ? run.dot : "bg-muted-foreground/40"}`} />
+          <span
+            className={`w-1.5 h-1.5 rounded-full shrink-0 ${run ? run.dot : "bg-muted-foreground/40"}`}
+          />
           <span className="truncate">
             {run ? (
               <>
-                <span className="text-foreground">{run.label}</span> {relTime(lastRun.started_at)}
+                <span className="text-foreground">{run.label}</span>{" "}
+                {relTime(lastRun.started_at)}
               </>
             ) : (
               "Never run"
             )}
           </span>
         </div>
-        <span className="flex items-center gap-1.5 shrink-0" title={wf.created_at ? `Created ${relTime(wf.created_at)}` : undefined}>
+        <span
+          className="flex items-center gap-1.5 shrink-0"
+          title={
+            wf.created_at ? `Created ${relTime(wf.created_at)}` : undefined
+          }
+        >
           <GitBranch className="w-3.5 h-3.5" />
           {steps} {steps === 1 ? "step" : "steps"}
         </span>
@@ -250,7 +329,11 @@ export default function WorkflowList() {
   const navigate = useNavigate();
   const searchRef = useRef(null);
 
-  const [modalState, setModalState] = useState({ type: null, id: null, name: "" });
+  const [modalState, setModalState] = useState({
+    type: null,
+    id: null,
+    name: "",
+  });
   const [inputValue, setInputValue] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState("");
@@ -281,7 +364,8 @@ export default function WorkflowList() {
     const map = {};
     history.forEach((r) => {
       const cur = map[r.workflow];
-      if (!cur || new Date(r.started_at) > new Date(cur.started_at)) map[r.workflow] = r;
+      if (!cur || new Date(r.started_at) > new Date(cur.started_at))
+        map[r.workflow] = r;
     });
     return map;
   }, [history]);
@@ -289,9 +373,15 @@ export default function WorkflowList() {
   const stats = useMemo(() => {
     const active = workflows.filter((w) => w.is_active !== false).length;
     const dayAgo = now - 24 * 60 * 60 * 1000;
-    const runs24 = history.filter((r) => new Date(r.started_at).getTime() > dayAgo).length;
-    const done = history.filter((r) => ["success", "failed"].includes(String(r.status).toLowerCase()));
-    const ok = done.filter((r) => String(r.status).toLowerCase() === "success").length;
+    const runs24 = history.filter(
+      (r) => new Date(r.started_at).getTime() > dayAgo,
+    ).length;
+    const done = history.filter((r) =>
+      ["success", "failed"].includes(String(r.status).toLowerCase()),
+    );
+    const ok = done.filter(
+      (r) => String(r.status).toLowerCase() === "success",
+    ).length;
     return {
       total: workflows.length,
       active,
@@ -308,20 +398,40 @@ export default function WorkflowList() {
       if (filter === "active" && !isActive) return false;
       if (filter === "paused" && isActive) return false;
       if (!q) return true;
-      return w.name.toLowerCase().includes(q) || String(w.id).toLowerCase().startsWith(q);
+      return (
+        w.name.toLowerCase().includes(q) ||
+        String(w.id).toLowerCase().startsWith(q)
+      );
     });
   }, [workflows, query, filter]);
 
-  const openCreateModal = () => { setModalError(""); setInputValue(""); setModalState({ type: "create", id: null, name: "" }); };
-  const openRenameModal = (id, name) => { setModalError(""); setInputValue(name); setModalState({ type: "rename", id, name }); };
-  const openDeleteModal = (id, name) => { setModalError(""); setModalState({ type: "delete", id, name }); };
-  const closeModal = () => { setModalState({ type: null, id: null, name: "" }); setInputValue(""); setModalError(""); };
+  const openCreateModal = () => {
+    setModalError("");
+    setInputValue("");
+    setModalState({ type: "create", id: null, name: "" });
+  };
+  const openRenameModal = (id, name) => {
+    setModalError("");
+    setInputValue(name);
+    setModalState({ type: "rename", id, name });
+  };
+  const openDeleteModal = (id, name) => {
+    setModalError("");
+    setModalState({ type: "delete", id, name });
+  };
+  const closeModal = () => {
+    setModalState({ type: null, id: null, name: "" });
+    setInputValue("");
+    setModalError("");
+  };
 
   const toggleActive = async (wf) => {
     const next = !(wf.is_active !== false);
     try {
       await updateWorkflow(wf.id, { is_active: next });
-      setWorkflows((prev) => prev.map((w) => (w.id === wf.id ? { ...w, is_active: next } : w)));
+      setWorkflows((prev) =>
+        prev.map((w) => (w.id === wf.id ? { ...w, is_active: next } : w)),
+      );
     } catch (e) {
       console.error("Failed to update workflow", e);
     }
@@ -338,7 +448,11 @@ export default function WorkflowList() {
       } else if (modalState.type === "rename") {
         if (inputValue.trim() !== "" && inputValue !== modalState.name) {
           await updateWorkflow(modalState.id, { name: inputValue.trim() });
-          setWorkflows((prev) => prev.map((w) => (w.id === modalState.id ? { ...w, name: inputValue.trim() } : w)));
+          setWorkflows((prev) =>
+            prev.map((w) =>
+              w.id === modalState.id ? { ...w, name: inputValue.trim() } : w,
+            ),
+          );
         }
         closeModal();
       } else if (modalState.type === "delete") {
@@ -348,7 +462,9 @@ export default function WorkflowList() {
       }
     } catch (err) {
       if (modalState.type === "create" && err.response?.status === 403) {
-        setModalError("Free plan limit reached. Upgrade to create more pipelines.");
+        setModalError(
+          "Free plan limit reached. Upgrade to create more pipelines.",
+        );
       } else {
         setModalError("An error occurred. Please try again.");
       }
@@ -366,7 +482,6 @@ export default function WorkflowList() {
   return (
     <main className="flex-1 h-full overflow-y-auto px-4 py-6 sm:px-6 md:px-8 bg-background custom-scrollbar">
       <div className="max-w-[1200px] mx-auto flex flex-col gap-6 pb-20">
-
         {/* Toolbar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1">
@@ -379,7 +494,9 @@ export default function WorkflowList() {
                 placeholder="Search by name or ID"
                 className="pl-9 h-9 bg-background border-border text-[13px]"
               />
-              <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 hidden sm:block text-[10px] font-mono text-muted-foreground bg-accent border border-border rounded px-1.5">/</kbd>
+              <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 hidden sm:block text-[10px] font-mono text-muted-foreground bg-accent border border-border rounded px-1.5">
+                /
+              </kbd>
             </div>
 
             <div className="inline-flex items-center rounded-md border border-border p-0.5 bg-background w-fit">
@@ -388,17 +505,24 @@ export default function WorkflowList() {
                   key={f.key}
                   onClick={() => setFilter(f.key)}
                   className={`h-7 px-2.5 rounded text-[12px] font-medium transition-colors flex items-center gap-1.5 ${
-                    filter === f.key ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"
+                    filter === f.key
+                      ? "bg-accent text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   {f.label}
-                  <span className="font-mono text-[10px] text-muted-foreground tabular-nums">{f.n}</span>
+                  <span className="font-mono text-[10px] text-muted-foreground tabular-nums">
+                    {f.n}
+                  </span>
                 </button>
               ))}
             </div>
           </div>
 
-          <Button onClick={openCreateModal} className="h-9 px-3.5 text-[13px] font-medium gap-1.5 shrink-0">
+          <Button
+            onClick={openCreateModal}
+            className="h-9 px-3.5 text-[13px] font-medium gap-1.5 shrink-0"
+          >
             <Plus className="w-4 h-4" /> New workflow
           </Button>
         </div>
@@ -406,7 +530,11 @@ export default function WorkflowList() {
         {/* Overview strip */}
         <div className="grid grid-cols-2 md:grid-cols-4 rounded-lg border border-border bg-card divide-border divide-x [&>*:nth-child(n+3)]:border-t md:[&>*:nth-child(n+3)]:border-t-0 [&>*:nth-child(3)]:border-l-0 md:[&>*:nth-child(3)]:border-l [&>*]:border-border">
           <Stat label="Workflows" value={stats.total} />
-          <Stat label="Active" value={stats.active} hint={stats.paused ? `${stats.paused} paused` : undefined} />
+          <Stat
+            label="Active"
+            value={stats.active}
+            hint={stats.paused ? `${stats.paused} paused` : undefined}
+          />
           <Stat label="Runs, last 24h" value={stats.runs24} />
           <Stat label="Success rate" value={stats.rate} />
         </div>
@@ -415,12 +543,18 @@ export default function WorkflowList() {
         <section className="flex flex-col gap-3">
           <h2 className="text-[13px] font-medium text-foreground">
             Workflows
-            {!loading && <span className="ml-2 font-mono text-[11px] text-muted-foreground">{visible.length}</span>}
+            {!loading && (
+              <span className="ml-2 font-mono text-[11px] text-muted-foreground">
+                {visible.length}
+              </span>
+            )}
           </h2>
 
           {loading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+              {Array.from({ length: 6 }).map((_, i) => (
+                <SkeletonCard key={i} />
+              ))}
             </div>
           ) : visible.length === 0 ? (
             <div className="flex flex-col items-center justify-center text-center gap-3 rounded-lg border border-dashed border-border py-20 px-6">
@@ -429,7 +563,9 @@ export default function WorkflowList() {
               </div>
               <div className="flex flex-col gap-1">
                 <p className="text-[14px] font-medium text-foreground">
-                  {workflows.length === 0 ? "No workflows yet" : "No workflows match"}
+                  {workflows.length === 0
+                    ? "No workflows yet"
+                    : "No workflows match"}
                 </p>
                 <p className="text-[13px] text-muted-foreground max-w-[36ch]">
                   {workflows.length === 0
@@ -438,7 +574,10 @@ export default function WorkflowList() {
                 </p>
               </div>
               {workflows.length === 0 && (
-                <Button onClick={openCreateModal} className="h-9 px-3.5 text-[13px] gap-1.5 mt-1">
+                <Button
+                  onClick={openCreateModal}
+                  className="h-9 px-3.5 text-[13px] gap-1.5 mt-1"
+                >
                   <Plus className="w-4 h-4" /> New workflow
                 </Button>
               )}
@@ -473,7 +612,11 @@ export default function WorkflowList() {
           >
             <div className="flex flex-col gap-1.5">
               <h3 className="text-[15px] font-semibold tracking-tight text-foreground">
-                {modalState.type === "create" ? "New workflow" : modalState.type === "rename" ? "Rename workflow" : "Delete workflow"}
+                {modalState.type === "create"
+                  ? "New workflow"
+                  : modalState.type === "rename"
+                    ? "Rename workflow"
+                    : "Delete workflow"}
               </h3>
               <p className="text-[13px] text-muted-foreground">
                 {modalState.type === "delete"
@@ -482,7 +625,11 @@ export default function WorkflowList() {
               </p>
             </div>
 
-            {modalError && <Badge variant="destructive" className="rounded-md w-fit">{modalError}</Badge>}
+            {modalError && (
+              <Badge variant="destructive" className="rounded-md w-fit">
+                {modalError}
+              </Badge>
+            )}
 
             <form onSubmit={handleModalSubmit} className="flex flex-col gap-5">
               {modalState.type !== "delete" && (
@@ -495,14 +642,32 @@ export default function WorkflowList() {
                 />
               )}
               <div className="flex items-center justify-end gap-2">
-                <Button variant="ghost" type="button" onClick={closeModal} className="h-8 text-[13px]">Cancel</Button>
+                <Button
+                  variant="ghost"
+                  type="button"
+                  onClick={closeModal}
+                  className="h-8 text-[13px]"
+                >
+                  Cancel
+                </Button>
                 <Button
                   type="submit"
-                  variant={modalState.type === "delete" ? "destructive" : "default"}
+                  variant={
+                    modalState.type === "delete" ? "destructive" : "default"
+                  }
                   className="h-8 text-[13px]"
-                  disabled={isSubmitting || (modalState.type !== "delete" && !inputValue.trim())}
+                  disabled={
+                    isSubmitting ||
+                    (modalState.type !== "delete" && !inputValue.trim())
+                  }
                 >
-                  {isSubmitting ? "Working..." : modalState.type === "delete" ? "Delete" : modalState.type === "create" ? "Create" : "Save"}
+                  {isSubmitting
+                    ? "Working..."
+                    : modalState.type === "delete"
+                      ? "Delete"
+                      : modalState.type === "create"
+                        ? "Create"
+                        : "Save"}
                 </Button>
               </div>
             </form>

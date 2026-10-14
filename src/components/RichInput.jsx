@@ -1,40 +1,127 @@
-import { useEditor, EditorContent, ReactNodeViewRenderer, NodeViewWrapper } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
-import Placeholder from '@tiptap/extension-placeholder';
-import { Node, mergeAttributes } from '@tiptap/core';
-import { useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from "react";
+import {
+  useEditor,
+  EditorContent,
+  ReactNodeViewRenderer,
+  NodeViewWrapper,
+} from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import Placeholder from "@tiptap/extension-placeholder";
+import { Node, mergeAttributes } from "@tiptap/core";
+import { getIntegrationIcon, appName } from "../flow/appIcon";
+import { humanizeVariable } from "../flow/nodes";
 
-// 1. The visual React component for the Data Pill
+// Context so pills inside TipTap know the trigger app icon, upstream nodes, and step numbers
+export const RichInputMetaContext = createContext({
+  triggerNode: null,
+  upstream: [],
+  stepNumbers: {},
+});
+
+function resolvePillMeta(rawKey, meta) {
+  const clean = String(rawKey || "").trim();
+  const [root, ...rest] = clean.split(".");
+  const fieldKey = rest.join(".");
+
+  if (root === "trigger") {
+    const actionKey = meta?.triggerNode?.data?.actionKey || "webhook";
+    const stepNum =
+      (meta?.triggerNode && meta?.stepNumbers?.[meta.triggerNode.id]) || 1;
+    const friendly = humanizeVariable(fieldKey || clean);
+    return {
+      actionKey,
+      stepNum,
+      label: friendly || "Trigger Data",
+      tooltip: `${stepNum}. ${appName(actionKey)} → ${friendly} ({{${clean}}})`,
+    };
+  }
+
+  const upNode = (meta?.upstream || []).find((n) => n.id === root);
+  if (upNode) {
+    const actionKey = upNode.data?.actionKey || "action";
+    const stepNum = meta?.stepNumbers?.[upNode.id] || "";
+    const friendly =
+      fieldKey === "reply"
+        ? "AI Response"
+        : fieldKey
+          ? humanizeVariable(fieldKey)
+          : `${appName(actionKey)} Output`;
+    return {
+      actionKey,
+      stepNum,
+      label: friendly,
+      tooltip: `${stepNum ? `${stepNum}. ` : ""}${appName(actionKey)} → ${friendly} ({{${clean}}})`,
+    };
+  }
+
+  return {
+    actionKey: "webhook",
+    stepNum: null,
+    label: humanizeVariable(clean) || clean,
+    tooltip: `{{${clean}}}`,
+  };
+}
+
+// 1. Visual React component for the inline Data Pill
 const VariableComponent = ({ node }) => {
+  const meta = useContext(RichInputMetaContext);
+  const { actionKey, stepNum, label, tooltip } = resolvePillMeta(
+    node.attrs.rawKey,
+    meta,
+  );
+
   return (
-    <NodeViewWrapper as="span" className="inline-block align-middle mx-[2px] translate-y-[-1px]">
-      <span className="inline-flex items-center px-2 py-0.5 rounded-[5px] text-[10px] font-mono font-bold bg-[#7c5cff]/15 text-[#7c5cff] border border-[#7c5cff]/30 shadow-sm cursor-default select-none transition-colors hover:bg-[#7c5cff]/25">
-        {node.attrs.rawKey}
+    <NodeViewWrapper
+      as="span"
+      className="inline-block align-middle mx-0.5 -translate-y-px"
+    >
+      <span
+        title={tooltip}
+        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium bg-accent text-foreground border border-border shadow-sm cursor-default select-none transition-colors hover:border-foreground/40"
+      >
+        <span className="w-3.5 h-3.5 shrink-0 flex items-center justify-center">
+          {getIntegrationIcon(actionKey)}
+        </span>
+        <span className="truncate max-w-[180px]">
+          {stepNum ? `${stepNum}. ` : ""}
+          {label}
+        </span>
       </span>
     </NodeViewWrapper>
   );
 };
 
-// 2. The TipTap Extension that manages the pill logic
+// 2. TipTap Extension that manages the atomic pill node
 const VariableExtension = Node.create({
-  name: 'variable',
-  group: 'inline',
+  name: "variable",
+  group: "inline",
   inline: true,
-  atom: true, // CRITICAL: Makes the pill act as a single, deletable character
+  atom: true,
 
   addAttributes() {
-    return { rawKey: { default: '' } };
+    return {
+      rawKey: {
+        default: "",
+        parseHTML: (el) =>
+          el.getAttribute("rawkey") || el.getAttribute("data-rawkey") || "",
+        renderHTML: (attrs) => ({ rawkey: attrs.rawKey }),
+      },
+    };
   },
 
   parseHTML() {
-    return [{ tag: 'span[data-variable]' }];
+    return [{ tag: "span[data-variable]" }];
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ['span', mergeAttributes(HTMLAttributes, { 'data-variable': true }), HTMLAttributes.rawKey];
+    return [
+      "span",
+      mergeAttributes(HTMLAttributes, { "data-variable": "true" }),
+      HTMLAttributes.rawkey || "",
+    ];
   },
 
-  // When extracting data to save to your database, convert it BACK to {{rawKey}}
+  // Converts the visual pill back into {{rawKey}} when saving to the backend
   renderText({ node }) {
     return `{{${node.attrs.rawKey}}}`;
   },
@@ -44,69 +131,86 @@ const VariableExtension = Node.create({
   },
 });
 
-// Helper to convert backend database strings into visual pills on load
 const parseRawToHTML = (val) => {
-  if (!val) return '<p></p>';
+  if (!val) return "<p></p>";
   const html = String(val)
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/{{(.*?)}}/g, (match, p1) => {
-      return `<span data-variable="true" rawkey="${p1}"></span>`;
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, p1) => {
+      const safeKey = p1.trim().replace(/"/g, "&quot;");
+      return `<span data-variable="true" rawkey="${safeKey}"></span>`;
     });
-  return `<p>${html.replace(/\n/g, '<br>')}</p>`;
+  return `<p>${html.replace(/\n/g, "<br>")}</p>`;
 };
 
-// 3. The Main Exported Component
-export default function RichInput({ value, onChange, placeholder, isTextArea }) {
+// 3. Main Exported Component
+export default function RichInput({
+  value,
+  onChange,
+  placeholder,
+  isTextArea,
+}) {
   const [isFocused, setIsFocused] = useState(false);
 
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
-        // Disable standard rich text formatting so it behaves like a normal input
-        heading: false, bold: false, italic: false, strike: false, code: false, codeBlock: false, blockquote: false, bulletList: false, orderedList: false, horizontalRule: false,
+        heading: false,
+        bold: false,
+        italic: false,
+        strike: false,
+        code: false,
+        codeBlock: false,
+        blockquote: false,
+        bulletList: false,
+        orderedList: false,
+        horizontalRule: false,
       }),
-      Placeholder.configure({ placeholder, emptyEditorClass: 'is-editor-empty' }),
+      Placeholder.configure({
+        placeholder,
+        emptyEditorClass: "is-editor-empty",
+      }),
       VariableExtension,
     ],
     content: parseRawToHTML(value),
     editorProps: {
       handleKeyDown: (view, event) => {
-        // Prevent "Enter" key on single-line inputs
-        if (!isTextArea && event.key === 'Enter') return true;
+        if (!isTextArea && event.key === "Enter") return true;
         return false;
       },
     },
-    onUpdate: ({ editor }) => {
-      // Export exactly what the backend needs
-      const newText = editor.getText({ blockSeparator: '\n' });
+    onUpdate: ({ editor: ed }) => {
+      const newText = ed.getText({ blockSeparator: "\n" });
       onChange(newText);
     },
     onFocus: () => setIsFocused(true),
     onBlur: () => setIsFocused(false),
   });
 
-  // Sync external changes (e.g., when the user clicks the variable injection buttons)
   useEffect(() => {
     if (editor && value !== undefined) {
-      const currentText = editor.getText({ blockSeparator: '\n' });
+      const currentText = editor.getText({ blockSeparator: "\n" });
       if (value !== currentText) {
         editor.commands.setContent(parseRawToHTML(value));
-        editor.commands.focus('end'); // Keep cursor at the end after inserting a pill
+        editor.commands.focus("end");
       }
     }
   }, [value, editor]);
 
   return (
-    <div className={`relative bg-canvas border rounded-lg transition-colors shadow-inner w-full flex flex-col justify-center overflow-hidden
-      ${isFocused ? 'border-accent' : 'border-border-default'}
-      ${isTextArea ? 'min-h-[96px] items-start pt-2.5' : 'h-[42px] items-start pt-[10px]'}
-    `}>
+    <div
+      onClick={() => editor?.commands.focus()}
+      className={`relative bg-background border rounded-md transition-colors w-full flex flex-col justify-center overflow-hidden cursor-text ${
+        isFocused
+          ? "border-foreground ring-1 ring-foreground/20"
+          : "border-border hover:border-muted-foreground/50"
+      } ${isTextArea ? "min-h-[96px] items-start py-2" : "min-h-[36px] items-start py-1.5"}`}
+    >
       <EditorContent
         editor={editor}
-        className="w-full h-full px-3 text-sm text-text-primary outline-none [&>.ProseMirror]:outline-none [&>.ProseMirror]:min-h-full"
+        className="w-full h-full px-3 text-[13px] leading-relaxed text-foreground outline-none [&>.ProseMirror]:outline-none [&>.ProseMirror]:min-h-full [&>.ProseMirror]:break-words"
       />
-      {/* Scope TipTap placeholder styling */}
       <style>{`
         .ProseMirror p.is-editor-empty:first-child::before {
           color: #71717a;
