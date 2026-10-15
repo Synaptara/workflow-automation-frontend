@@ -19,6 +19,7 @@ import {
   autoLayout,
   stepsToGraph,
   graphToSteps,
+  computeFlow,
   getUpstream,
   nextId,
 } from "../flow/graph";
@@ -142,32 +143,19 @@ export default function WorkflowBuilder() {
   useEffect(() => () => clearTimeout(noticeTimer.current), []);
 
   // Compute sequential step numbers (1 = Trigger, 2..N = ordered steps)
-  const stepNumbers = useMemo(() => {
-    const map = {};
-    const trig = nodes.find((n) => n.type === "trigger");
-    let count = 1;
-    if (trig) map[trig.id] = count++;
-    const rest = nodes
-      .filter((n) => n.type !== "trigger")
-      .slice()
-      .sort(
-        (a, b) =>
-          (a.position?.x ?? 0) - (b.position?.x ?? 0) ||
-          (a.position?.y ?? 0) - (b.position?.y ?? 0),
-      );
-    rest.forEach((n) => {
-      map[n.id] = count++;
-    });
-    return map;
-  }, [nodes]);
-
+  const flow = useMemo(() => computeFlow(nodes, edges), [nodes, edges]);
+  const stepNumbers = flow.numbers;
   const numberedNodes = useMemo(
     () =>
       nodes.map((n) => ({
         ...n,
-        data: { ...n.data, stepNumber: stepNumbers[n.id] },
+        data: {
+          ...n.data,
+          stepNumber: flow.numbers[n.id],
+          connected: flow.reachable.has(n.id),
+        },
       })),
-    [nodes, stepNumbers],
+    [nodes, flow],
   );
 
   const triggerNode = useMemo(

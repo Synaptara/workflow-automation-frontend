@@ -22,12 +22,28 @@ export function useRunSocket(runId) {
     ws.onmessage = (msg) => {
       try {
         const { event, data } = JSON.parse(msg.data);
+        const key = data?.client_id || data?.step_id;
 
-        if (event === "step_started") {
-          setStepStatus((prev) => ({ ...prev, [data.step_id]: "running" }));
+        if (event === "step_started" && key) {
+          setStepStatus((prev) => ({
+            ...prev,
+            [key]: "running",
+            ...(data.step_id ? { [data.step_id]: "running" } : {}),
+          }));
         }
-        if (event === "step_finished") {
-          setStepStatus((prev) => ({ ...prev, [data.step_id]: data.status }));
+        if (event === "step_finished" && key) {
+          setStepStatus((prev) => ({
+            ...prev,
+            [key]: data.status,
+            ...(data.step_id ? { [data.step_id]: data.status } : {}),
+          }));
+        }
+        if (event === "condition_evaluated" && key) {
+          setStepStatus((prev) => ({
+            ...prev,
+            [key]: "success",
+            ...(data.step_id ? { [data.step_id]: "success" } : {}),
+          }));
         }
         if (event === "run_finished") {
           setRunStatus(data.status);
