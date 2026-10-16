@@ -1,12 +1,10 @@
 import axios from "axios";
 
-// Dynamically pull the URL. In production (Vercel), it uses your duckdns URL.
-// In local dev (where the env var might be missing), it defaults to "" for the proxy.
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
 const api = axios.create({
   baseURL: `${API_BASE}/api`,
-  withCredentials: true // CRITICAL: This tells the browser to attach the HttpOnly cookie
+  withCredentials: true,
 });
 
 api.interceptors.request.use((config) => {
@@ -15,7 +13,6 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Singleton promise to prevent duplicate concurrent refresh requests
 let refreshing = null;
 const refresh = () =>
   (refreshing ??= axios
@@ -34,22 +31,28 @@ api.interceptors.response.use(
     const original = error.config;
     const isAuthCall = original?.url?.includes("/auth/");
 
-    // If access token expires (401), we haven't retried yet, and it's not an auth route...
-    if (error.response?.status === 401 && !original._retry && !isAuthCall) {
+    if (error.response?.status === 401 && !original?._retry && !isAuthCall) {
       original._retry = true;
       try {
         const token = await refresh();
         original.headers.Authorization = `Bearer ${token}`;
         return api(original);
-      } catch {
-        // If the refresh token is expired or invalid, log them out
-        localStorage.removeItem("access");
-        localStorage.removeItem("username");
-        window.location.href = "/login";
+      } catch (refreshError) {
+        const status = refreshError?.response?.status;
+        // QA-06 FIX: Only wipe session if refresh token is genuinely invalid/expired (401/403).
+        // Do NOT log the user out on 429 rate-limits, 5xx server restarts, or transient network drops.
+        if (status === 401 || status === 403) {
+          localStorage.removeItem("access");
+          localStorage.removeItem("username");
+          if (window.location.pathname !== "/login") {
+            window.location.assign("/login?expired=1");
+          }
+        }
+        return Promise.reject(refreshError);
       }
     }
     return Promise.reject(error);
-  }
+  },
 );
 
 export default api;

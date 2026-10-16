@@ -29,7 +29,10 @@ export default function Register() {
       await sendOtp(email);
       setStep(2);
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to send code. Email might be in use.");
+      setError(
+        err.response?.data?.error ||
+          "Failed to send code. Email might be in use.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -43,7 +46,14 @@ export default function Register() {
       await register(username, email, password, otp);
       navigate("/webhooks");
     } catch (err) {
-      setError(err.response?.data?.error || "Invalid verification code.");
+      const data = err.response?.data;
+      const firstFieldErr =
+        data && typeof data === "object"
+          ? Object.values(data)
+              .flat()
+              .find((v) => typeof v === "string")
+          : null;
+      setError(data?.error || firstFieldErr || "Invalid verification code.");
     } finally {
       setIsLoading(false);
     }
@@ -51,14 +61,22 @@ export default function Register() {
 
   const handleGoogleLogin = () => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-    const redirectUri = encodeURIComponent(`${window.location.origin}/auth/callback/google`);
-    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=email%20profile`;
+    const redirectUri = encodeURIComponent(
+      `${window.location.origin}/auth/callback/google`,
+    );
+    const state = crypto.randomUUID();
+    sessionStorage.setItem("oauth_state", state);
+    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=email%20profile&state=${state}`;
   };
 
   const handleGithubLogin = () => {
     const clientId = import.meta.env.VITE_GITHUB_CLIENT_ID;
-    const redirectUri = encodeURIComponent(`${window.location.origin}/auth/callback/github`);
-    window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=user:email`;
+    const redirectUri = encodeURIComponent(
+      `${window.location.origin}/auth/callback/github`,
+    );
+    const state = crypto.randomUUID();
+    sessionStorage.setItem("oauth_state", state);
+    window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=user:email&state=${state}`;
   };
 
   return (
@@ -108,7 +126,8 @@ export default function Register() {
             Get started with us
           </h1>
           <p className="text-zinc-200 text-[14px] leading-relaxed mb-8 drop-shadow">
-            Create an account to build, automate, and <br /> manage your enterprise workflows effortlessly.
+            Create an account to build, automate, and <br /> manage your
+            enterprise workflows effortlessly.
           </p>
 
           <div className="w-full flex flex-col gap-2.5">
@@ -116,20 +135,24 @@ export default function Register() {
               <div className="w-5 h-5 rounded-full bg-white text-black flex items-center justify-center text-[11px] font-bold">
                 1
               </div>
-              <span className="text-[13px] font-medium text-white">Create your account</span>
+              <span className="text-[13px] font-medium text-white">
+                Create your account
+              </span>
             </div>
             <div className="w-full bg-black/40 backdrop-blur-md border border-white/5 rounded-xl p-3 flex items-center gap-3 shadow-lg">
               <div className="w-5 h-5 rounded-full bg-white/10 text-zinc-300 flex items-center justify-center text-[11px] font-bold">
                 2
               </div>
-              <span className="text-[13px] font-medium text-zinc-300">Set up your first workflow</span>
+              <span className="text-[13px] font-medium text-zinc-300">
+                Set up your first workflow
+              </span>
             </div>
           </div>
         </div>
       </div>
 
       {/* Right Panel: Compact Register Form */}
-      <div className="flex-1 flex flex-col justify-center items-center p-6">
+      <main className="flex-1 flex flex-col justify-center items-center p-6">
         <div className="w-full max-w-[340px]">
           <Link
             to="/"
@@ -169,7 +192,12 @@ export default function Register() {
                 onClick={handleGoogleLogin}
                 className="flex-1 flex items-center justify-center gap-2 bg-[#09090b] border border-[#27272a] hover:border-[#404040] rounded-lg py-2 text-[13px] font-medium transition-colors text-[#e4e4e7]"
               >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
                   <path
                     d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                     fill="#4285F4"
@@ -194,7 +222,12 @@ export default function Register() {
                 onClick={handleGithubLogin}
                 className="flex-1 flex items-center justify-center gap-2 bg-[#09090b] border border-[#27272a] hover:border-[#404040] rounded-lg py-2 text-[13px] font-medium transition-colors text-[#e4e4e7]"
               >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
                   <path
                     fillRule="evenodd"
                     clipRule="evenodd"
@@ -225,9 +258,17 @@ export default function Register() {
           {step === 1 ? (
             <form onSubmit={handleSendOtp} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-[12px] font-medium text-[#a1a1aa]">Username</label>
+                <label
+                  htmlFor="register-username"
+                  className="text-[12px] font-medium text-[#a1a1aa]"
+                >
+                  Username
+                </label>
                 <input
+                  id="register-username"
+                  name="username"
                   type="text"
+                  autoComplete="username"
                   required
                   className="bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-2.5 text-[13px] text-white placeholder-[#52525b] outline-none focus:border-[#52525b] transition-colors"
                   placeholder="johndoe"
@@ -237,9 +278,17 @@ export default function Register() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-[12px] font-medium text-[#a1a1aa]">Email</label>
+                <label
+                  htmlFor="register-email"
+                  className="text-[12px] font-medium text-[#a1a1aa]"
+                >
+                  Email
+                </label>
                 <input
+                  id="register-email"
+                  name="email"
                   type="email"
+                  autoComplete="email"
                   required
                   className="bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-2.5 text-[13px] text-white placeholder-[#52525b] outline-none focus:border-[#52525b] transition-colors"
                   placeholder="name@company.com"
@@ -249,9 +298,18 @@ export default function Register() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-[12px] font-medium text-[#a1a1aa]">Password</label>
+                <label
+                  htmlFor="register-password"
+                  className="text-[12px] font-medium text-[#a1a1aa]"
+                >
+                  Password
+                </label>
                 <input
+                  id="register-password"
+                  name="password"
                   type="password"
+                  autoComplete="new-password"
+                  minLength={8}
                   required
                   className="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-2.5 text-[13px] text-white placeholder-[#52525b] outline-none focus:border-[#52525b] transition-colors"
                   placeholder="••••••••"
@@ -269,13 +327,23 @@ export default function Register() {
               </button>
             </form>
           ) : (
-            <form onSubmit={handleFinalRegister} className="flex flex-col gap-4">
+            <form
+              onSubmit={handleFinalRegister}
+              className="flex flex-col gap-4"
+            >
               <div className="flex flex-col gap-1.5">
-                <label className="text-[12px] font-medium text-[#a1a1aa]">
+                <label
+                  htmlFor="register-otp"
+                  className="text-[12px] font-medium text-[#a1a1aa]"
+                >
                   Verification Code
                 </label>
                 <input
+                  id="register-otp"
+                  name="otp"
                   type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
                   required
                   placeholder="000000"
                   maxLength={6}
@@ -304,12 +372,15 @@ export default function Register() {
 
           <p className="text-[#71717a] text-[12px] text-center mt-6">
             Already have an account?{" "}
-            <Link to="/login" className="text-white font-medium hover:underline">
+            <Link
+              to="/login"
+              className="text-white font-medium hover:underline"
+            >
               Sign in
             </Link>
           </p>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

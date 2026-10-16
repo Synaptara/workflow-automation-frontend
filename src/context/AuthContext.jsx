@@ -11,7 +11,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem("access", data.access);
     // REMOVED: localStorage.setItem("refresh", data.refresh);
     localStorage.setItem("username", username);
-    setIsAuthenticated(true);
+    setIsAuthenticated(true); 
   };
 
   const sendOtp = async (email) => {

@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /workflows
+Disallow: /webhooks
+Disallow: /history
+Disallow: /integrations
+Disallow: /billing
+Disallow: /notifications
+Disallow: /auth/callback/
+Disallow: /integrations/callback/
+
+Sitemap: https://orkflo.vercel.app/sitemap.xml
