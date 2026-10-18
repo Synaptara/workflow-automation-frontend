@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { getWsTicket } from "../api/workflows";
 
 export function useRunSocket(runId) {
   const [stepStatus, setStepStatus] = useState({});
@@ -11,49 +12,68 @@ export function useRunSocket(runId) {
     setRunStatus("running");
 
     const token = localStorage.getItem("access");
-    const apiBase = import.meta.env.VITE_API_URL || "http://localhost:8000";
+    if (!token) return;
 
-    // Convert http:// to ws:// and https:// to wss:// automatically
+    let closed = false;
+    const apiBase = import.meta.env.VITE_API_URL || "http://localhost:8000";
     const wsBase = apiBase.replace(/^http/, "ws");
 
-    const ws = new WebSocket(`${wsBase}/ws/runs/${runId}/?token=${token}`);
-    wsRef.current = ws;
-
-    ws.onmessage = (msg) => {
+    const connect = async () => {
       try {
-        const { event, data } = JSON.parse(msg.data);
-        const key = data?.client_id || data?.step_id;
+        let authParam = "";
+        try {
+          const ticket = await getWsTicket();
+          authParam = `ticket=${ticket}`;
+        } catch {
+          authParam = `token=${token}`;
+        }
 
-        if (event === "step_started" && key) {
-          setStepStatus((prev) => ({
-            ...prev,
-            [key]: "running",
-            ...(data.step_id ? { [data.step_id]: "running" } : {}),
-          }));
-        }
-        if (event === "step_finished" && key) {
-          setStepStatus((prev) => ({
-            ...prev,
-            [key]: data.status,
-            ...(data.step_id ? { [data.step_id]: data.status } : {}),
-          }));
-        }
-        if (event === "condition_evaluated" && key) {
-          setStepStatus((prev) => ({
-            ...prev,
-            [key]: "success",
-            ...(data.step_id ? { [data.step_id]: "success" } : {}),
-          }));
-        }
-        if (event === "run_finished") {
-          setRunStatus(data.status);
-        }
+        if (closed) return;
+        const ws = new WebSocket(`${wsBase}/ws/runs/${runId}/?${authParam}`);
+        wsRef.current = ws;
+
+        ws.onmessage = (msg) => {
+          try {
+            const { event, data } = JSON.parse(msg.data);
+            const key = data?.client_id || data?.step_id;
+
+            if (event === "step_started" && key) {
+              setStepStatus((prev) => ({
+                ...prev,
+                [key]: "running",
+                ...(data.step_id ? { [data.step_id]: "running" } : {}),
+              }));
+            }
+            if (event === "step_finished" && key) {
+              setStepStatus((prev) => ({
+                ...prev,
+                [key]: data.status,
+                ...(data.step_id ? { [data.step_id]: data.status } : {}),
+              }));
+            }
+            if (event === "condition_evaluated" && key) {
+              setStepStatus((prev) => ({
+                ...prev,
+                [key]: "success",
+                ...(data.step_id ? { [data.step_id]: "success" } : {}),
+              }));
+            }
+            if (event === "run_finished") {
+              setRunStatus(data.status);
+            }
+          } catch {
+            /* ignore malformed frames */
+          }
+        };
       } catch {
-        /* ignore malformed frames */
+        // connect error
       }
     };
 
+    connect();
+
     return () => {
+      closed = true;
       if (wsRef.current) {
         wsRef.current.close();
       }

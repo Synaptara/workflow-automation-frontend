@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { WS_BASE } from "../lib/config";
-import { getUnreadCount } from "../api/workflows";
+import { getUnreadCount, getWsTicket } from "../api/workflows";
 
 export function useGlobalSocket() {
   const [unreadCount, setUnreadCount] = useState(0);
@@ -13,18 +13,31 @@ export function useGlobalSocket() {
     const sync = () => getUnreadCount().then(setUnreadCount).catch(() => {});
     sync();
 
-    const connect = () => {
-      ws = new WebSocket(`${WS_BASE}/ws/notifications/?token=${token}`);
-      ws.onopen = () => { tries = 0; };
-      ws.onmessage = (e) => {
+    const connect = async () => {
+      try {
+        let authParam = "";
         try {
-          const { event } = JSON.parse(e.data);
-          if (event === "run_finished" || event === "notification_created") sync();
-        } catch { /* ignore malformed frames */ }
-      };
-      ws.onclose = () => {
+          const ticket = await getWsTicket();
+          authParam = `ticket=${ticket}`;
+        } catch {
+          authParam = `token=${token}`;
+        }
+
+        if (closed) return;
+        ws = new WebSocket(`${WS_BASE}/ws/notifications/?${authParam}`);
+        ws.onopen = () => { tries = 0; };
+        ws.onmessage = (e) => {
+          try {
+            const { event } = JSON.parse(e.data);
+            if (event === "run_finished" || event === "notification_created") sync();
+          } catch { /* ignore malformed frames */ }
+        };
+        ws.onclose = () => {
+          if (!closed) timer = setTimeout(connect, Math.min(30000, 1000 * 2 ** tries++));
+        };
+      } catch {
         if (!closed) timer = setTimeout(connect, Math.min(30000, 1000 * 2 ** tries++));
-      };
+      }
     };
     connect();
 
