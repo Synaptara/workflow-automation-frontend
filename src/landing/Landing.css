@@ -2,77 +2,77 @@
    authenticated app's own (violet) design system. */
 
 .landing-root {
-    --l-bg: #060607;
-    --l-surface: #0d0d10;
-    --l-surface-2: #131316;
-    --l-border: #1f1f24;
-    --l-text: #f5f4f2;
-    --l-text-muted: #8a8a92;
-    --l-btn-primary-bg: #f5f4f2;
-    --l-btn-primary-text: #060607;
-    --l-btn-secondary-bg: #131316;
-    --l-btn-secondary-text: #f5f4f2;
-    --l-node-line: #2a2a30;
-    --l-gradient:
-        radial-gradient(
-            ellipse 70% 60% at 15% 20%,
-            rgba(120, 40, 55, 0.35),
-            transparent 60%
-        ),
-        radial-gradient(
-            ellipse 60% 55% at 85% 15%,
-            rgba(40, 45, 110, 0.35),
-            transparent 60%
-        );
+  --l-bg: #060607;
+  --l-surface: #0d0d10;
+  --l-surface-2: #131316;
+  --l-border: #1f1f24;
+  --l-text: #f5f4f2;
+  --l-text-muted: #8a8a92;
+  --l-btn-primary-bg: #f5f4f2;
+  --l-btn-primary-text: #060607;
+  --l-btn-secondary-bg: #131316;
+  --l-btn-secondary-text: #f5f4f2;
+  --l-node-line: #2a2a30;
+  --l-gradient:
+    radial-gradient(
+      ellipse 70% 60% at 15% 20%,
+      rgba(120, 40, 55, 0.35),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 60% 55% at 85% 15%,
+      rgba(40, 45, 110, 0.35),
+      transparent 60%
+    );
 
-    background: var(--l-bg);
-    color: var(--l-text);
-    font-family: "Figtree", ui-sans-serif, system-ui, sans-serif;
+  background: var(--l-bg);
+  color: var(--l-text);
+  font-family: "Figtree", ui-sans-serif, system-ui, sans-serif;
 }
 
 .landing-root[data-theme="light"] {
-    --l-bg: #ffffff;
-    --l-surface: #ffffff;
-    --l-surface-2: #f7f7f7;
-    --l-border: #e5e5e5;
-    --l-text: #0a0a0a;
-    --l-text-muted: #63636b;
-    --l-btn-primary-bg: #0a0a0a;
-    --l-btn-primary-text: #ffffff;
-    --l-btn-secondary-bg: #f2f2f2;
-    --l-btn-secondary-text: #0a0a0a;
-    --l-node-line: #d8d8dc;
-    --l-gradient:
-        radial-gradient(
-            ellipse 70% 60% at 15% 20%,
-            rgba(120, 40, 55, 0.06),
-            transparent 60%
-        ),
-        radial-gradient(
-            ellipse 60% 55% at 85% 15%,
-            rgba(40, 45, 110, 0.06),
-            transparent 60%
-        );
+  --l-bg: #ffffff;
+  --l-surface: #ffffff;
+  --l-surface-2: #f7f7f7;
+  --l-border: #e5e5e5;
+  --l-text: #0a0a0a;
+  --l-text-muted: #63636b;
+  --l-btn-primary-bg: #0a0a0a;
+  --l-btn-primary-text: #ffffff;
+  --l-btn-secondary-bg: #f2f2f2;
+  --l-btn-secondary-text: #0a0a0a;
+  --l-node-line: #d8d8dc;
+  --l-gradient:
+    radial-gradient(
+      ellipse 70% 60% at 15% 20%,
+      rgba(120, 40, 55, 0.06),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 60% 55% at 85% 15%,
+      rgba(40, 45, 110, 0.06),
+      transparent 60%
+    );
 }
 
 .landing-root .font-display {
-    font-family: "Ovo", ui-serif, Georgia, serif;
-    font-weight: 400;
-    font-style: normal;
+  font-family: "Ovo", ui-serif, Georgia, serif;
+  font-weight: 400;
+  font-style: normal;
 }
 
 .landing-root a,
 .landing-root button {
-    transition:
-        opacity 0.15s ease,
-        background-color 0.15s ease,
-        border-color 0.15s ease;
+  transition:
+    opacity 0.15s ease,
+    background-color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .landing-root * {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-    }
+  .landing-root * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

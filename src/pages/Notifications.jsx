@@ -1,15 +1,31 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getNotifications, markNotificationRead, markAllNotificationsRead } from "../api/workflows";
 import {
-  Bell, CheckCheck, CheckCircle2, XCircle, Sparkles, RefreshCw, Inbox, ChevronRight, AlertTriangle
+  getNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+} from "../api/workflows";
+import {
+  Bell,
+  CheckCheck,
+  CheckCircle2,
+  XCircle,
+  Sparkles,
+  RefreshCw,
+  Inbox,
+  ChevronRight,
+  AlertTriangle,
+  History,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 
 /* ---------- helpers ---------- */
 
 function relTime(value) {
-  const diff = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000));
+  const diff = Math.max(
+    0,
+    Math.floor((Date.now() - new Date(value).getTime()) / 1000),
+  );
   if (diff < 60) return "just now";
   const m = Math.floor(diff / 60);
   if (m < 60) return `${m}m ago`;
@@ -17,13 +33,17 @@ function relTime(value) {
   if (h < 24) return `${h}h ago`;
   const d = Math.floor(h / 24);
   if (d < 30) return `${d}d ago`;
-  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return new Date(value).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
 }
 
 function dayGroup(value) {
   const d = new Date(value);
   const today = new Date();
-  const start = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const start = (x) =>
+    new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const days = Math.round((start(today) - start(d)) / 86400000);
   if (days <= 0) return "Today";
   if (days === 1) return "Yesterday";
@@ -33,8 +53,16 @@ function dayGroup(value) {
 const TYPE_UI = {
   run_failed: { Icon: XCircle, tone: "text-destructive", label: "Runs" },
   run_success: { Icon: CheckCircle2, tone: "text-emerald-500", label: "Runs" },
-  usage_warning: { Icon: AlertTriangle, tone: "text-orange-500", label: "System" },
-  integration_error: { Icon: XCircle, tone: "text-destructive", label: "System" },
+  usage_warning: {
+    Icon: AlertTriangle,
+    tone: "text-orange-500",
+    label: "System",
+  },
+  integration_error: {
+    Icon: XCircle,
+    tone: "text-destructive",
+    label: "System",
+  },
   product: { Icon: Sparkles, tone: "text-blue-500", label: "Product" },
 };
 
@@ -45,6 +73,9 @@ const TABS = [
   { key: "product", label: "Product" },
 ];
 
+const isFailure = (n) =>
+  n.type === "run_failed" || n.type === "integration_error";
+
 /* ---------- components ---------- */
 
 function Item({ n, onOpen }) {
@@ -52,34 +83,62 @@ function Item({ n, onOpen }) {
   return (
     <button
       onClick={() => onOpen(n)}
-      className="group w-full flex items-start gap-3 px-4 py-3.5 text-left hover:bg-accent/40 transition-colors focus-visible:bg-accent/40 outline-none"
+      className="group relative flex w-full items-start gap-3 px-4 py-3 text-left outline-none transition-colors hover:bg-accent/50 focus-visible:bg-accent/50"
     >
-      <span className="relative mt-0.5 w-8 h-8 shrink-0 rounded-md border border-border bg-background flex items-center justify-center shadow-sm">
-        <ui.Icon className={`w-4 h-4 ${ui.tone}`} />
-        {!n.is_read && <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-blue-500 ring-2 ring-card" />}
+      {!n.is_read && (
+        <span className="absolute left-1.5 top-[22px] h-1.5 w-1.5 rounded-full bg-blue-500" />
+      )}
+
+      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-background shadow-sm">
+        <ui.Icon className={`h-4 w-4 ${ui.tone}`} />
       </span>
 
-      <span className="flex-1 min-w-0 flex flex-col gap-0.5">
-        <span className="flex items-center gap-2">
-          <span className={`text-[13px] truncate ${n.is_read ? "text-muted-foreground" : "text-foreground font-medium"}`}>{n.title}</span>
-          {n.type === "product" && (
-            <span className="text-[9px] font-bold text-blue-500 border border-blue-500/20 bg-blue-500/10 rounded px-1.5 py-0.5 shrink-0 uppercase tracking-widest">New</span>
-          )}
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="flex items-center justify-between gap-3">
+          <span className="flex min-w-0 items-center gap-2">
+            <span
+              className={`truncate text-[13px] ${n.is_read ? "text-muted-foreground" : "font-medium text-foreground"}`}
+            >
+              {n.title}
+            </span>
+            {n.type === "product" && (
+              <span className="shrink-0 rounded border border-blue-500/20 bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-blue-500">
+                New
+              </span>
+            )}
+          </span>
+          <span className="flex shrink-0 items-center gap-1 text-[11px] font-medium tabular-nums text-muted-foreground">
+            {relTime(n.created_at)}
+            <ChevronRight className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" />
+          </span>
         </span>
-        <span className="text-[12px] text-muted-foreground leading-relaxed line-clamp-2">{n.body}</span>
-      </span>
-
-      <span className="flex items-center gap-1.5 shrink-0 text-[11px] text-muted-foreground mt-0.5 font-medium">
-        {relTime(n.created_at)}
-        <ChevronRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+        <span className="line-clamp-2 text-[12px] leading-relaxed text-muted-foreground">
+          {n.body}
+        </span>
       </span>
     </button>
   );
 }
 
-/* ---------- page ---------- */
+function Skeleton() {
+  return (
+    <div className="divide-y divide-border animate-pulse">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div key={i} className="flex gap-3 px-4 py-3">
+          <div className="h-8 w-8 rounded-md bg-accent" />
+          <div className="flex flex-1 flex-col gap-2 pt-0.5">
+            <div className="h-3 w-2/5 rounded bg-accent" />
+            <div className="h-3 w-4/5 rounded bg-accent/70" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
-export default function Notifications() {
+/* ---------- popover panel ---------- */
+
+export default function Notifications({ open, onClose }) {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -102,13 +161,18 @@ export default function Notifications() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  // Fetch every time the panel opens; cached list stays visible while refreshing
+  useEffect(() => {
+    if (open) load();
+  }, [open, load]);
+
+  if (!open) return null;
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   const visible = notifications.filter((n) => {
     if (tab === "unread") return !n.is_read;
-    if (tab === "failed") return n.type === "run_failed" || n.type === "integration_error";
+    if (tab === "failed") return isFailure(n);
     if (tab === "product") return n.type === "product";
     return true;
   });
@@ -120,119 +184,154 @@ export default function Notifications() {
   const counts = {
     all: notifications.length,
     unread: unreadCount,
-    failed: notifications.filter((n) => n.type === "run_failed" || n.type === "integration_error").length,
+    failed: notifications.filter(isFailure).length,
     product: notifications.filter((n) => n.type === "product").length,
   };
 
   const handleOpen = async (n) => {
-      // Optimistically update UI
-      if (!n.is_read) {
-          setNotifications(prev => prev.map(item => item.id === n.id ? { ...item, is_read: true } : item));
-          try {
-              await markNotificationRead(n.id);
-          } catch (e) {
-              console.error("Failed to mark as read", e);
-          }
-      }
-
-      // Check if there is a link, otherwise fallback to /history
-      const target = n.link || "/history";
-
-      // If the admin put an external link (http...), open it in a new tab
-      if (target.startsWith("http://") || target.startsWith("https://")) {
-          window.open(target, "_blank", "noopener,noreferrer");
-      } else {
-          // Otherwise, use React Router to navigate instantly within the app
-          navigate(target);
-      }
-    };
-
-  const handleMarkAllRead = async () => {
     // Optimistically update UI
-    setNotifications(prev => prev.map(item => ({ ...item, is_read: true })));
-    try {
-        await markAllNotificationsRead();
-    } catch (e) {
-        console.error("Failed to mark all as read", e);
+    if (!n.is_read) {
+      setNotifications((prev) =>
+        prev.map((item) =>
+          item.id === n.id ? { ...item, is_read: true } : item,
+        ),
+      );
+      try {
+        await markNotificationRead(n.id);
+      } catch (e) {
+        console.error("Failed to mark as read", e);
+      }
+    }
+
+    // Check if there is a link, otherwise fallback to /history
+    const target = n.link || "/history";
+    onClose();
+
+    // External links open in a new tab, internal ones route instantly
+    if (target.startsWith("http://") || target.startsWith("https://")) {
+      window.open(target, "_blank", "noopener,noreferrer");
+    } else {
+      navigate(target);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="h-full px-4 py-6 sm:px-6 md:px-8 bg-background">
-        <div className="max-w-[800px] mx-auto flex flex-col gap-6 animate-pulse">
-          <div className="h-8 w-44 rounded bg-accent" />
-          <div className="rounded-lg border border-border divide-y divide-border">
-            {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-[72px] bg-card" />)}
-          </div>
-        </div>
-      </div>
+  const handleMarkAllRead = async () => {
+    // Optimistically update UI
+    setNotifications((prev) =>
+      prev.map((item) => ({ ...item, is_read: true })),
     );
-  }
+    try {
+      await markAllNotificationsRead();
+    } catch (e) {
+      console.error("Failed to mark all as read", e);
+    }
+  };
 
   return (
-    <div className="h-full overflow-y-auto px-4 py-6 sm:px-6 md:px-8 bg-background custom-scrollbar">
-      <div className="max-w-[800px] mx-auto flex flex-col gap-6 pb-20">
+    <div
+      role="dialog"
+      aria-label="Notifications"
+      className="fixed inset-x-3 top-[3.75rem] z-50 flex max-h-[min(580px,calc(100vh-5rem))] origin-top-right flex-col overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-150 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[420px]"
+    >
+      {/* header */}
+      <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border px-4">
+        <div className="flex items-center gap-2">
+          <h2 className="text-[14px] font-semibold tracking-tight text-foreground">
+            Notifications
+          </h2>
+          {unreadCount > 0 && (
+            <span className="rounded-full bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-blue-500">
+              {unreadCount} new
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleMarkAllRead}
+            disabled={unreadCount === 0}
+            title="Mark all read"
+            aria-label="Mark all read"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+          >
+            <CheckCheck className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => load(true)}
+            disabled={refreshing}
+            title="Refresh"
+            aria-label="Refresh"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${refreshing ? "animate-spin text-foreground" : ""}`}
+            />
+          </button>
+        </div>
+      </div>
 
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex flex-col gap-1">
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Notifications</h1>
-            <p className="text-[13px] text-muted-foreground">Run results, account alerts and what's new in Orkflo.</p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <Button variant="outline" onClick={handleMarkAllRead} disabled={unreadCount === 0} className="h-8 px-3 text-[12px] gap-1.5 font-medium border-border">
-              <CheckCheck className="w-3.5 h-3.5" /> Mark all read
-            </Button>
+      {/* tabs */}
+      <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-border px-3 py-2">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-[12px] font-medium transition-colors ${
+              tab === t.key
+                ? "bg-accent text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {t.label}
+            <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+              {counts[t.key]}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* body */}
+      <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
+        {error && (
+          <div className="m-3 flex items-center justify-between rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-[13px] font-medium text-destructive">
+            {error}
             <button
               onClick={() => load(true)}
-              disabled={refreshing}
-              title="Refresh"
-              className="w-8 h-8 rounded-md flex items-center justify-center border border-border bg-background hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shadow-sm"
+              className="underline underline-offset-4"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin text-foreground" : ""}`} />
+              Retry
             </button>
-          </div>
-        </div>
-
-        <div className="inline-flex items-center rounded-md border border-border p-0.5 bg-background w-fit overflow-x-auto max-w-full shadow-sm">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`h-7 px-3 rounded text-[12px] font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap ${
-                tab === t.key ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {t.label}
-              <span className="font-mono text-[10px] text-muted-foreground tabular-nums">{counts[t.key]}</span>
-            </button>
-          ))}
-        </div>
-
-        {error && (
-          <div className="rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-[13px] text-destructive flex items-center justify-between font-medium">
-            {error}
-            <button onClick={() => load(true)} className="underline underline-offset-4">Retry</button>
           </div>
         )}
 
-        {groups.length === 0 ? (
-          <div className="flex flex-col items-center text-center gap-3 rounded-xl border border-dashed border-border py-24 px-6 bg-accent/10">
-            <div className="w-12 h-12 rounded-xl border border-border bg-accent flex items-center justify-center shadow-sm">
-              {tab === "unread" ? <Bell className="w-5 h-5 text-muted-foreground" /> : <Inbox className="w-5 h-5 text-muted-foreground" />}
+        {loading && notifications.length === 0 ? (
+          <Skeleton />
+        ) : groups.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 px-6 py-14 text-center">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-accent shadow-sm">
+              {tab === "unread" ? (
+                <Bell className="h-5 w-5 text-muted-foreground" />
+              ) : (
+                <Inbox className="h-5 w-5 text-muted-foreground" />
+              )}
             </div>
             <div className="flex flex-col gap-1">
-              <p className="text-[14px] font-medium text-foreground">{tab === "unread" ? "You're all caught up" : "Nothing here yet"}</p>
-              <p className="text-[13px] text-muted-foreground max-w-[36ch] leading-relaxed">
-                {tab === "unread" ? "New run results and updates will show up here." : "Run a workflow and its result will appear here."}
+              <p className="text-[14px] font-medium text-foreground">
+                {tab === "unread" ? "You're all caught up" : "Nothing here yet"}
+              </p>
+              <p className="max-w-[32ch] text-[12px] leading-relaxed text-muted-foreground">
+                {tab === "unread"
+                  ? "New run results and updates will show up here."
+                  : "Run a workflow and its result will appear here."}
               </p>
             </div>
           </div>
         ) : (
           groups.map(([label, items]) => (
-            <section key={label} className="flex flex-col gap-2">
-              <h2 className="text-[12px] font-semibold text-foreground uppercase tracking-wider">{label}</h2>
-              <div className="rounded-xl border border-border bg-card divide-y divide-border overflow-hidden shadow-sm">
+            <section key={label}>
+              <h3 className="sticky top-0 z-10 border-b border-border bg-popover/95 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur">
+                {label}
+              </h3>
+              <div className="divide-y divide-border">
                 {items.map((n) => (
                   <Item key={n.id} n={n} onOpen={handleOpen} />
                 ))}
@@ -240,6 +339,20 @@ export default function Notifications() {
             </section>
           ))
         )}
+      </div>
+
+      {/* footer */}
+      <div className="shrink-0 border-t border-border p-1.5">
+        <Button
+          variant="ghost"
+          onClick={() => {
+            onClose();
+            navigate("/history");
+          }}
+          className="h-8 w-full gap-1.5 text-[12px] font-medium text-muted-foreground hover:text-foreground"
+        >
+          <History className="h-3.5 w-3.5" /> View execution history
+        </Button>
       </div>
     </div>
   );
