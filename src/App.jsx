@@ -8,6 +8,7 @@ import {
   Link,
   useLocation,
 } from "react-router-dom";
+import Home from "./pages/Home";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Sidebar from "./components/Sidebar";
@@ -139,6 +140,7 @@ export default function App() {
               <Route path="/templates" element={<TemplateGallery />} />
               <Route path="/billing" element={<Billing />} />
               <Route path="/notifications" element={<Notifications />} />
+              <Route path="/home" element={<Home />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />
